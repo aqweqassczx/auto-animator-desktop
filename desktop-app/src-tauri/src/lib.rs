@@ -253,6 +253,16 @@ fn emit_finished(app: &AppHandle, run_id: &str, payload: PipelineFinishedPayload
     );
 }
 
+fn push_recent_line(store: &Arc<Mutex<Vec<String>>>, line: String) {
+    if let Ok(mut lines) = store.lock() {
+        lines.push(line);
+        if lines.len() > 200 {
+            let overflow = lines.len() - 200;
+            lines.drain(0..overflow);
+        }
+    }
+}
+
 fn resolve_bundled_runner(app: &AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path_resolver().resource_dir()?;
     let file_name = if cfg!(target_os = "windows") {
@@ -350,14 +360,17 @@ fn start_pipeline_run(
         .insert(run_id.clone(), child_arc.clone());
 
     let result_payload: Arc<Mutex<Option<PipelineFinishedPayload>>> = Arc::new(Mutex::new(None));
+    let recent_logs: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
     let app_for_out = app.clone();
     let run_out = run_id.clone();
     let result_for_out = result_payload.clone();
+    let recent_for_out = recent_logs.clone();
     if let Some(stdout) = stdout {
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines().flatten() {
+                push_recent_line(&recent_for_out, line.clone());
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     if value.get("ok").is_some() {
                         let parsed = PipelineFinishedPayload {
@@ -384,10 +397,12 @@ fn start_pipeline_run(
 
     let app_for_err = app.clone();
     let run_err = run_id.clone();
+    let recent_for_err = recent_logs.clone();
     if let Some(stderr) = stderr {
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().flatten() {
+                push_recent_line(&recent_for_err, line.clone());
                 emit_log(&app_for_err, &run_err, line);
             }
         });
@@ -397,6 +412,7 @@ fn start_pipeline_run(
     let run_wait = run_id.clone();
     let runs_for_wait = state.runs.clone();
     let result_for_wait = result_payload.clone();
+    let recent_for_wait = recent_logs.clone();
     std::thread::spawn(move || {
         let exit_status = {
             let mut child_guard = match child_arc.lock() {
@@ -425,17 +441,40 @@ fn start_pipeline_run(
         match exit_status {
             Ok(status) => {
                 let payload = result_for_wait.lock().ok().and_then(|v| v.clone());
+                let fallback_tail = recent_for_wait
+                    .lock()
+                    .ok()
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .rev()
+                            .take(20)
+                            .cloned()
+                            .collect::<Vec<String>>()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<String>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_default();
+                let default_error = if status.success() {
+                    None
+                } else if fallback_tail.is_empty() {
+                    Some(format!("Пайплайн завершился с кодом {:?}", status.code()))
+                } else {
+                    Some(format!(
+                        "Пайплайн завершился с кодом {:?}\nПоследние строки лога:\n{}",
+                        status.code(),
+                        fallback_tail
+                    ))
+                };
                 emit_finished(
                     &app_for_wait,
                     &run_wait,
                     payload.unwrap_or_else(|| PipelineFinishedPayload {
                         ok: status.success(),
                         result: None,
-                        error: if status.success() {
-                            None
-                        } else {
-                            Some(format!("Пайплайн завершился с кодом {:?}", status.code()))
-                        },
+                        error: default_error,
                         traceback: None,
                     }),
                 );
