@@ -240,36 +240,34 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             return normalized
         return f"Systran/faster-whisper-{normalized}"
 
-    def _ensure_whisper_model_ready(model_name: str) -> None:
+    def _ensure_whisper_model_ready(model_name: str) -> str:
         repo_id = _resolve_whisper_repo(model_name)
         token = (
             os.environ.get("HF_TOKEN")
             or os.environ.get("HUGGINGFACE_HUB_TOKEN")
             or os.environ.get("HUGGING_FACE_HUB_TOKEN")
         )
-        kwargs: dict[str, Any] = {
-            "repo_id": repo_id,
-            "local_dir_use_symlinks": False,
-            "resume_download": True,
-        }
+        kwargs: dict[str, Any] = {"repo_id": repo_id}
         if token:
             kwargs["token"] = token
 
         print(f"Проверяем/скачиваем Whisper-модель: {repo_id}", flush=True)
         model_path = snapshot_download(**kwargs)
+        model_path = os.path.abspath(model_path)
         model_bin = os.path.join(model_path, "model.bin")
         if not os.path.isfile(model_bin):
             # If snapshot is incomplete, clear and download once more.
             print(f"model.bin не найден после скачивания, очищаем и перекачиваем: {model_path}", flush=True)
             shutil.rmtree(model_path, ignore_errors=True)
-            model_path = snapshot_download(**kwargs)
+            model_path = os.path.abspath(snapshot_download(**kwargs))
             model_bin = os.path.join(model_path, "model.bin")
             if not os.path.isfile(model_bin):
                 raise RuntimeError(f"Whisper model download incomplete: missing model.bin in {model_path}")
+        return model_path
 
-    def _run_whisper_once(source_wav: str):
+    def _run_whisper_once(source_wav: str, local_model_dir: str):
         def _transcribe_with(device: str, compute_type: str):
-            model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
+            model = WhisperModel(local_model_dir, device=device, compute_type=compute_type)
             segments_iter, info = model.transcribe(
                 source_wav,
                 language=whisper_language,
@@ -363,7 +361,7 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
 
     temp_wav_path: str | None = None
     try:
-        _ensure_whisper_model_ready(whisper_model)
+        model_local_dir = _ensure_whisper_model_ready(whisper_model)
         # Нормализация аудио в WAV 16k mono снижает ошибки декодера ffmpeg/whisper.
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             temp_wav_path = tmp.name
@@ -383,14 +381,16 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         subprocess.run(convert_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
         try:
-            segments, _ = _run_whisper_once(temp_wav_path)
+            segments, _ = _run_whisper_once(temp_wav_path, model_local_dir)
         except Exception as exc:
             if _cleanup_broken_whisper_snapshot(exc):
+                model_local_dir = _ensure_whisper_model_ready(whisper_model)
                 try:
-                    segments, _ = _run_whisper_once(temp_wav_path)
+                    segments, _ = _run_whisper_once(temp_wav_path, model_local_dir)
                 except Exception as exc_second:
                     if _cleanup_hf_model_cache(whisper_model):
-                        segments, _ = _run_whisper_once(temp_wav_path)
+                        model_local_dir = _ensure_whisper_model_ready(whisper_model)
+                        segments, _ = _run_whisper_once(temp_wav_path, model_local_dir)
                     else:
                         raise exc_second
             else:

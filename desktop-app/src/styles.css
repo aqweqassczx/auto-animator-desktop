@@ -221,6 +221,28 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  align-items: flex-start;
+}
+
+.jobTopRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.jobDeleteBtn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #6b3a3a;
+  background: #3a1d24;
+  color: #ffb4b4;
+  cursor: pointer;
+}
+
+.jobDeleteBtn:hover {
+  background: #4f252d;
 }
 
 .jobStatus {

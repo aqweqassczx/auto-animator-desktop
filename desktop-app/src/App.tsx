@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { open as openDialog } from "@tauri-apps/api/dialog";
 import { open as openPath } from "@tauri-apps/api/shell";
 import { getVersion } from "@tauri-apps/api/app";
@@ -382,6 +382,21 @@ function App() {
     setRunningRunId(null);
   };
 
+  const removeJobFromLibrary = async (job: LibraryJob, e: MouseEvent) => {
+    e.stopPropagation();
+    if (job.status === "running" && job.runId) {
+      if (runningRunId === job.runId) {
+        await stopPipelineRun(job.runId);
+        setRunningRunId(null);
+      }
+    }
+    setJobs((prev) => {
+      const next = prev.filter((j) => j.id !== job.id);
+      setActiveJobId((aid) => (aid === job.id ? next[0]?.id ?? null : aid));
+      return next;
+    });
+  };
+
   const installAvailableUpdate = async () => {
     if (isInstallingUpdate) return;
     setIsInstallingUpdate(true);
@@ -567,7 +582,17 @@ function App() {
             >
               <div className="jobTop">
                 <strong>{new Date(job.createdAt).toLocaleString()}</strong>
-                <span className={`jobStatus ${job.status}`}>{job.status}</span>
+                <div className="jobTopRight">
+                  <span className={`jobStatus ${job.status}`}>{job.status}</span>
+                  <button
+                    type="button"
+                    className="jobDeleteBtn"
+                    title="Удалить из библиотеки"
+                    onClick={(e) => void removeJobFromLibrary(job, e)}
+                  >
+                    Удалить
+                  </button>
+                </div>
               </div>
               <div className="jobStage">{job.stageLabel}</div>
               <div className="progressWrap">
