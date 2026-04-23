@@ -7,6 +7,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 #[derive(Default)]
 struct AppState {
@@ -348,6 +350,11 @@ fn start_pipeline_run(
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .current_dir(&request.project_root);
+    #[cfg(target_os = "windows")]
+    {
+        // Do not flash a separate console window for the bundled runner.
+        cmd.creation_flags(0x08000000);
+    }
 
     let mut child = cmd.spawn().map_err(|e| format!("Ошибка запуска: {}", e))?;
     let stdout = child.stdout.take();

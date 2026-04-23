@@ -2,6 +2,7 @@ import difflib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import platform
@@ -230,6 +231,48 @@ def collect_assets_from_paths(asset_paths: list[str]) -> list[str]:
 
 
 def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str) -> list[dict[str, float | str]]:
+    def _run_whisper_once(source_wav: str):
+        try:
+            model = WhisperModel(whisper_model, device="cuda", compute_type="float16")
+            return model.transcribe(
+                source_wav,
+                language=whisper_language,
+                word_timestamps=True,
+                beam_size=5,
+                vad_filter=True,
+            )
+        except Exception:
+            print("Whisper GPU-режим недоступен/упал, повтор на CPU...", flush=True)
+            model = WhisperModel(whisper_model, device="cpu", compute_type="int8")
+            return model.transcribe(
+                source_wav,
+                language=whisper_language,
+                word_timestamps=True,
+                beam_size=5,
+                vad_filter=True,
+            )
+
+    def _cleanup_broken_whisper_snapshot(err: Exception) -> bool:
+        text = str(err)
+        marker = "Unable to open file 'model.bin' in model '"
+        if marker not in text:
+            return False
+        start = text.find(marker) + len(marker)
+        end = text.find("'", start)
+        if end <= start:
+            return False
+        model_dir = text[start:end]
+        if not model_dir:
+            return False
+        try:
+            if os.path.isdir(model_dir):
+                print(f"Поврежден кэш модели Whisper, удаляем и пробуем снова: {model_dir}", flush=True)
+                shutil.rmtree(model_dir, ignore_errors=True)
+                return True
+        except Exception:
+            return False
+        return False
+
     temp_wav_path: str | None = None
     try:
         # Нормализация аудио в WAV 16k mono снижает ошибки декодера ffmpeg/whisper.
@@ -251,24 +294,12 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         subprocess.run(convert_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
         try:
-            model = WhisperModel(whisper_model, device="cuda", compute_type="float16")
-            segments, _ = model.transcribe(
-                temp_wav_path,
-                language=whisper_language,
-                word_timestamps=True,
-                beam_size=5,
-                vad_filter=True,
-            )
-        except Exception:
-            print("Whisper GPU-режим недоступен/упал, повтор на CPU...", flush=True)
-            model = WhisperModel(whisper_model, device="cpu", compute_type="int8")
-            segments, _ = model.transcribe(
-                temp_wav_path,
-                language=whisper_language,
-                word_timestamps=True,
-                beam_size=5,
-                vad_filter=True,
-            )
+            segments, _ = _run_whisper_once(temp_wav_path)
+        except Exception as exc:
+            if _cleanup_broken_whisper_snapshot(exc):
+                segments, _ = _run_whisper_once(temp_wav_path)
+            else:
+                raise
     finally:
         if temp_wav_path and os.path.exists(temp_wav_path):
             os.remove(temp_wav_path)
