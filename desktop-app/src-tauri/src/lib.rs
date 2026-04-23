@@ -282,6 +282,30 @@ fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
     })
 }
 
+fn build_human_error(exit_code_label: &str, fallback_tail: &str) -> String {
+    let tail_lower = fallback_tail.to_ascii_lowercase();
+    if tail_lower.contains("unable to open file 'model.bin'") {
+        return format!(
+            "Whisper не смог загрузить модель (model.bin в кэше поврежден или недокачан). \
+Попробуй запустить еще раз: приложение очистит кэш и скачает модель заново.\n\nКод: {}\nЛог:\n{}",
+            exit_code_label, fallback_tail
+        );
+    }
+    if tail_lower.contains("window-close event") || tail_lower.contains("program aborting") {
+        return format!(
+            "Процесс рендера был прерван внешним событием (окно/процесс закрыт во время работы).\n\nКод: {}\nЛог:\n{}",
+            exit_code_label, fallback_tail
+        );
+    }
+    if fallback_tail.trim().is_empty() {
+        return format!("Пайплайн завершился с ошибкой. Код: {}", exit_code_label);
+    }
+    format!(
+        "Пайплайн завершился с ошибкой. Код: {}\nПоследние строки лога:\n{}",
+        exit_code_label, fallback_tail
+    )
+}
+
 fn resolve_bundled_runner(app: &AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path_resolver().resource_dir()?;
     let file_name = if cfg!(target_os = "windows") {
@@ -479,14 +503,8 @@ fn start_pipeline_run(
                     .unwrap_or_else(|| "unknown".to_string());
                 let default_error = if status.success() {
                     None
-                } else if fallback_tail.is_empty() {
-                    Some(format!("Пайплайн завершился с кодом {}", exit_code_label))
                 } else {
-                    Some(format!(
-                        "Пайплайн завершился с кодом {}\nПоследние строки лога:\n{}",
-                        exit_code_label,
-                        fallback_tail
-                    ))
+                    Some(build_human_error(&exit_code_label, &fallback_tail))
                 };
                 let effective_payload = if let Some(mut p) = payload {
                     if !p.ok && p.error.as_deref().unwrap_or("").trim().is_empty() {
