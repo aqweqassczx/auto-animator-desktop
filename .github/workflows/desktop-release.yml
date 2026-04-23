@@ -48,7 +48,7 @@ jobs:
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-        run: npm run tauri:build
+        run: npm run tauri:build -- --bundles msi,updater
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -57,3 +57,40 @@ jobs:
           path: |
             desktop-app/src-tauri/target/release/bundle/msi/*.msi
             desktop-app/src-tauri/target/release/bundle/msi/*.zip
+
+  build-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop-app/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app (DMG)
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        run: npm run tauri:build -- --bundles dmg,updater
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-animator-desktop-macos
+          path: |
+            desktop-app/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop-app/src-tauri/target/release/bundle/**/*.app.tar.gz
+            desktop-app/src-tauri/target/release/bundle/**/*.app.tar.gz.sig
