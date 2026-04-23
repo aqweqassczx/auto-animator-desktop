@@ -151,6 +151,9 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           BASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
           PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          url_encode() {
+            python -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$1"
+          }
 
           mkdir -p release-assets/generated
           PLATFORMS='{}'
@@ -158,20 +161,22 @@ jobs:
           WIN_ZIP="$(find release-assets/windows -type f -name '*.zip' | head -n 1 || true)"
           if [ -n "${WIN_ZIP}" ] && [ -f "${WIN_ZIP}.sig" ]; then
             WIN_NAME="$(basename "${WIN_ZIP}")"
+            WIN_NAME_ENC="$(url_encode "${WIN_NAME}")"
             WIN_SIG="$(tr -d '\r\n' < "${WIN_ZIP}.sig")"
-            PLATFORMS="$(jq --arg url "${BASE_URL}/${WIN_NAME}" --arg sig "${WIN_SIG}" '. + {"windows-x86_64":{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
+            PLATFORMS="$(jq --arg url "${BASE_URL}/${WIN_NAME_ENC}" --arg sig "${WIN_SIG}" '. + {"windows-x86_64":{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
           fi
 
           while IFS= read -r MAC_TAR; do
             [ -z "${MAC_TAR}" ] && continue
             [ ! -f "${MAC_TAR}.sig" ] && continue
             MAC_NAME="$(basename "${MAC_TAR}")"
+            MAC_NAME_ENC="$(url_encode "${MAC_NAME}")"
             MAC_SIG="$(tr -d '\r\n' < "${MAC_TAR}.sig")"
             PLATFORM_KEY="darwin-x86_64"
             case "${MAC_NAME}" in
               *aarch64*|*arm64*) PLATFORM_KEY="darwin-aarch64" ;;
             esac
-            PLATFORMS="$(jq --arg key "${PLATFORM_KEY}" --arg url "${BASE_URL}/${MAC_NAME}" --arg sig "${MAC_SIG}" '. + {($key):{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
+            PLATFORMS="$(jq --arg key "${PLATFORM_KEY}" --arg url "${BASE_URL}/${MAC_NAME_ENC}" --arg sig "${MAC_SIG}" '. + {($key):{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
           done < <(find release-assets/macos -type f -name '*.app.tar.gz' | sort)
 
           if [ "$(jq 'length' <<< "${PLATFORMS}")" -eq 0 ]; then
