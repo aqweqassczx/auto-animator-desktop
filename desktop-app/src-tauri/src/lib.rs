@@ -13,6 +13,7 @@ use std::os::windows::process::CommandExt;
 #[derive(Default)]
 struct AppState {
     runs: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+    finished: Arc<Mutex<HashMap<String, PipelineFinishedPayload>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -471,6 +472,7 @@ fn start_pipeline_run(
     let app_for_wait = app.clone();
     let run_wait = run_id.clone();
     let runs_for_wait = state.runs.clone();
+    let finished_for_wait = state.finished.clone();
     let result_for_wait = result_payload.clone();
     let recent_for_wait = recent_logs.clone();
     std::thread::spawn(move || {
@@ -478,15 +480,19 @@ fn start_pipeline_run(
             let mut child_guard = match child_arc.lock() {
                 Ok(v) => v,
                 Err(_) => {
+                    let payload = PipelineFinishedPayload {
+                        ok: false,
+                        result: None,
+                        error: Some("Не удалось дождаться процесса".to_string()),
+                        traceback: None,
+                    };
+                    if let Ok(mut done) = finished_for_wait.lock() {
+                        done.insert(run_wait.clone(), payload.clone());
+                    }
                     emit_finished(
                         &app_for_wait,
                         &run_wait,
-                        PipelineFinishedPayload {
-                            ok: false,
-                            result: None,
-                            error: Some("Не удалось дождаться процесса".to_string()),
-                            traceback: None,
-                        },
+                        payload,
                     );
                     return;
                 }
@@ -534,27 +540,31 @@ fn start_pipeline_run(
                 } else {
                     None
                 };
-                emit_finished(
-                    &app_for_wait,
-                    &run_wait,
-                    effective_payload.unwrap_or_else(|| PipelineFinishedPayload {
-                        ok: status.success(),
-                        result: None,
-                        error: default_error,
-                        traceback: None,
-                    }),
-                );
+                let final_payload = effective_payload.unwrap_or_else(|| PipelineFinishedPayload {
+                    ok: status.success(),
+                    result: None,
+                    error: default_error,
+                    traceback: None,
+                });
+                emit_finished(&app_for_wait, &run_wait, final_payload.clone());
+                if let Ok(mut done) = finished_for_wait.lock() {
+                    done.insert(run_wait.clone(), final_payload);
+                }
             }
             Err(err) => {
+                let payload = PipelineFinishedPayload {
+                    ok: false,
+                    result: None,
+                    error: Some(format!("Ошибка ожидания процесса: {}", err)),
+                    traceback: None,
+                };
+                if let Ok(mut done) = finished_for_wait.lock() {
+                    done.insert(run_wait.clone(), payload.clone());
+                }
                 emit_finished(
                     &app_for_wait,
                     &run_wait,
-                    PipelineFinishedPayload {
-                        ok: false,
-                        result: None,
-                        error: Some(format!("Ошибка ожидания процесса: {}", err)),
-                        traceback: None,
-                    },
+                    payload,
                 );
             }
         }
@@ -572,7 +582,23 @@ fn stop_pipeline_run(state: State<AppState>, run_id: String) -> Result<(), Strin
         .clone();
     drop(guard);
     let mut c = child.lock().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        let pid = c.id();
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status();
+    }
     c.kill().map_err(|e| format!("Не удалось остановить: {}", e))
+}
+
+#[tauri::command]
+fn get_pipeline_result(
+    state: State<AppState>,
+    run_id: String,
+) -> Result<Option<PipelineFinishedPayload>, String> {
+    let mut guard = state.finished.lock().map_err(|e| e.to_string())?;
+    Ok(guard.remove(&run_id))
 }
 
 pub fn run() {
@@ -582,7 +608,8 @@ pub fn run() {
             discover_paths,
             discover_media_folders,
             start_pipeline_run,
-            stop_pipeline_run
+            stop_pipeline_run,
+            get_pipeline_result
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

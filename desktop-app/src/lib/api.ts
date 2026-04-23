@@ -24,6 +24,10 @@ export async function stopPipelineRun(runId: string): Promise<void> {
   return invoke("stop_pipeline_run", { runId });
 }
 
+export async function getPipelineResult(runId: string): Promise<PipelineResultPayload | null> {
+  return invoke("get_pipeline_result", { runId });
+}
+
 export async function listenPipelineLogs(
   runId: string,
   onLog: (line: string) => void

@@ -6,6 +6,7 @@ import { checkUpdate, installUpdate } from "@tauri-apps/api/updater";
 import {
   discoverMediaFolders,
   discoverPaths,
+  getPipelineResult,
   listenPipelineFinished,
   listenPipelineLogs,
   startPipelineRun,
@@ -272,7 +273,10 @@ function App() {
         });
       });
 
-      const unlistenFinished = await listenPipelineFinished(runId, (payload) => {
+      let finishedHandled = false;
+      const handleFinished = (payload: { ok: boolean; result?: LibraryJob["result"]; error?: string }) => {
+        if (finishedHandled) return;
+        finishedHandled = true;
         setRunningRunId(null);
         updateJob(job.id, (j) => ({
           ...j,
@@ -284,9 +288,20 @@ function App() {
           logs: payload.error ? [...j.logs, normalizeErrorText(payload.error) ?? payload.error] : j.logs
         }));
         setStatus(payload.ok ? "Задача завершена" : "Задача завершилась с ошибкой");
+      };
+
+      const unlistenFinished = await listenPipelineFinished(runId, (payload) => {
+        handleFinished(payload);
         void unlistenLog();
         void unlistenFinished();
       });
+
+      const immediateResult = await getPipelineResult(runId);
+      if (immediateResult) {
+        handleFinished(immediateResult);
+        void unlistenLog();
+        void unlistenFinished();
+      }
     } catch (error) {
       setRunningRunId(null);
       updateJob(job.id, (j) => ({
@@ -372,21 +387,12 @@ function App() {
     setIsInstallingUpdate(true);
     setUpdateInstallError("");
     setStatus("Скачиваем и устанавливаем обновление...");
+    let timeoutId: number | undefined;
     try {
-      await Promise.race([
-        installUpdate(),
-        new Promise((_, reject) =>
-          window.setTimeout(
-            () =>
-              reject(
-                new Error(
-                  "Установка обновления зависла по таймауту (120 сек). Закрой приложение и запусти снова."
-                )
-              ),
-            120000
-          )
-        )
-      ]);
+      timeoutId = window.setTimeout(() => {
+        setStatus("Обновление ставится дольше обычного... дождись завершения или перезапусти приложение.");
+      }, 120000);
+      await installUpdate();
       setUpdateStatus((prev) => ({ ...prev, available: false }));
       setStatus("Обновление установлено. Перезапусти приложение.");
     } catch (error) {
@@ -394,6 +400,9 @@ function App() {
       setUpdateInstallError(msg);
       setStatus(`Ошибка обновления: ${msg}`);
     } finally {
+      if (typeof timeoutId !== "undefined") {
+        window.clearTimeout(timeoutId);
+      }
       setIsInstallingUpdate(false);
     }
   };

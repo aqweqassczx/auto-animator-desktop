@@ -195,6 +195,31 @@ jobs:
           echo "Generated release-assets/generated/latest.json"
           cat release-assets/generated/latest.json
 
+      - name: Validate updater URLs against built artifacts
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import pathlib
+          import urllib.parse
+          manifest = pathlib.Path("release-assets/generated/latest.json")
+          data = json.loads(manifest.read_text(encoding="utf-8"))
+          artifact_names = {p.name for p in pathlib.Path("release-assets").rglob("*") if p.is_file()}
+          missing = []
+          for platform, row in data.get("platforms", {}).items():
+            url = row.get("url", "")
+            name = pathlib.Path(urllib.parse.urlparse(url).path).name
+            decoded = urllib.parse.unquote(name)
+            if decoded not in artifact_names:
+              missing.append((platform, decoded))
+          if missing:
+            print("Updater manifest points to missing artifacts:")
+            for platform, name in missing:
+              print(f" - {platform}: {name}")
+            raise SystemExit(1)
+          print("Updater manifest URLs validated against artifacts.")
+          PY
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

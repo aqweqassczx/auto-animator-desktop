@@ -330,7 +330,8 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         Removes model repo cache under huggingface hub, e.g.
         .../huggingface/hub/models--Systran--faster-whisper-medium
         """
-        safe = model_name.replace("/", "--")
+        repo_id = _resolve_whisper_repo(model_name)
+        safe = repo_id.replace("/", "--")
         repo_dir_name = f"models--{safe}"
         candidates: list[str] = []
 
@@ -1399,11 +1400,15 @@ def render_clip(asset: str, duration: float, out_name: str, fps: int, encoder: s
 
 
 def concatenate_final_video(output_folder: str, audio_file: str, final_output_path: str, encoder: str, fps: int) -> None:
+    def _ffmpeg_concat_escape(path: str) -> str:
+        # ffmpeg concat format wraps path in single quotes; escape embedded quotes safely.
+        return path.replace("'", r"'\''")
+
     clips = sorted([f for f in os.listdir(output_folder) if f.endswith(".mp4")], key=natural_sort_key)
     list_file_path = os.path.join(output_folder, "clips_list.txt")
     with open(list_file_path, "w", encoding="utf-8") as f:
         for clip in clips:
-            f.write(f"file '{clip}'\n")
+            f.write(f"file '{_ffmpeg_concat_escape(clip)}'\n")
 
     cmd = [
         "ffmpeg",
