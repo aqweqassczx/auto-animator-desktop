@@ -54,6 +54,11 @@ type LibraryJob = {
   error?: string;
 };
 
+function normalizeErrorText(value?: string): string | undefined {
+  if (!value) return value;
+  return value.replace(/Some\((\-?\d+)\)/g, "$1");
+}
+
 const defaultState: ConfigState = {
   projectRoot: "",
   mediaRoot: "",
@@ -82,9 +87,15 @@ function loadSavedJobs(): LibraryJob[] {
   if (!raw) return [];
   try {
     const jobs = JSON.parse(raw) as LibraryJob[];
-    return jobs.map((j) =>
-      j.status === "running" ? { ...j, status: "failed", error: "Приложение было перезапущено" } : j
-    );
+    return jobs.map((j) => ({
+      ...j,
+      error:
+        j.status === "running"
+          ? "Приложение было перезапущено"
+          : normalizeErrorText(j.error),
+      logs: j.logs.map((line) => normalizeErrorText(line) ?? line),
+      status: j.status === "running" ? "failed" : j.status
+    }));
   } catch {
     return [];
   }
@@ -126,6 +137,9 @@ function App() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("Готово");
   const [appVersion, setAppVersion] = useState<string>("");
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [updateDots, setUpdateDots] = useState(0);
+  const [updateInstallError, setUpdateInstallError] = useState<string>("");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     checked: false,
     available: false
@@ -165,6 +179,17 @@ function App() {
       .then((v) => setAppVersion(v))
       .catch(() => setAppVersion(""));
   }, []);
+
+  useEffect(() => {
+    if (!isInstallingUpdate) {
+      setUpdateDots(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setUpdateDots((prev) => (prev + 1) % 4);
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [isInstallingUpdate]);
 
   useEffect(() => {
     void (async () => {
@@ -255,8 +280,8 @@ function App() {
           progress: payload.ok ? 100 : j.progress,
           stageLabel: payload.ok ? "Готово" : "Ошибка",
           result: payload.result,
-          error: payload.error,
-          logs: payload.error ? [...j.logs, payload.error] : j.logs
+          error: normalizeErrorText(payload.error),
+          logs: payload.error ? [...j.logs, normalizeErrorText(payload.error) ?? payload.error] : j.logs
         }));
         setStatus(payload.ok ? "Задача завершена" : "Задача завершилась с ошибкой");
         void unlistenLog();
@@ -268,9 +293,9 @@ function App() {
         ...j,
         status: "failed",
         stageLabel: "Ошибка запуска",
-        error: String(error)
+        error: normalizeErrorText(String(error))
       }));
-      setStatus(`Ошибка запуска: ${String(error)}`);
+      setStatus(`Ошибка запуска: ${normalizeErrorText(String(error))}`);
     }
   };
 
@@ -343,8 +368,34 @@ function App() {
   };
 
   const installAvailableUpdate = async () => {
-    await installUpdate();
-    setStatus("Обновление установлено. Перезапусти приложение.");
+    if (isInstallingUpdate) return;
+    setIsInstallingUpdate(true);
+    setUpdateInstallError("");
+    setStatus("Скачиваем и устанавливаем обновление...");
+    try {
+      await Promise.race([
+        installUpdate(),
+        new Promise((_, reject) =>
+          window.setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Установка обновления зависла по таймауту (120 сек). Закрой приложение и запусти снова."
+                )
+              ),
+            120000
+          )
+        )
+      ]);
+      setUpdateStatus((prev) => ({ ...prev, available: false }));
+      setStatus("Обновление установлено. Перезапусти приложение.");
+    } catch (error) {
+      const msg = String(error);
+      setUpdateInstallError(msg);
+      setStatus(`Ошибка обновления: ${msg}`);
+    } finally {
+      setIsInstallingUpdate(false);
+    }
   };
 
   const activeJob = jobs.find((j) => j.id === activeJobId) || jobs[0];
@@ -370,8 +421,12 @@ function App() {
           <div>
             Доступно обновление {updateStatus.version ? `v${updateStatus.version}` : ""}.
             {updateStatus.body ? ` ${updateStatus.body}` : ""}
+            {isInstallingUpdate ? ` Устанавливаем${".".repeat(updateDots)}` : ""}
+            {updateInstallError ? ` Ошибка: ${updateInstallError}` : ""}
           </div>
-          <button onClick={installAvailableUpdate}>Обновить</button>
+          <button onClick={installAvailableUpdate} disabled={isInstallingUpdate}>
+            {isInstallingUpdate ? "Установка..." : "Обновить"}
+          </button>
         </section>
       )}
 

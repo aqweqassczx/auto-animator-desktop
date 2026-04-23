@@ -232,25 +232,25 @@ def collect_assets_from_paths(asset_paths: list[str]) -> list[str]:
 
 def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str) -> list[dict[str, float | str]]:
     def _run_whisper_once(source_wav: str):
-        try:
-            model = WhisperModel(whisper_model, device="cuda", compute_type="float16")
-            return model.transcribe(
+        def _transcribe_with(device: str, compute_type: str):
+            model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
+            segments_iter, info = model.transcribe(
                 source_wav,
                 language=whisper_language,
                 word_timestamps=True,
                 beam_size=5,
                 vad_filter=True,
             )
+            # Materialize here to catch lazy runtime failures (e.g. missing CUDA libs)
+            # inside this function so CPU fallback is guaranteed.
+            segments = list(segments_iter)
+            return segments, info
+
+        try:
+            return _transcribe_with("cuda", "float16")
         except Exception:
             print("Whisper GPU-режим недоступен/упал, повтор на CPU...", flush=True)
-            model = WhisperModel(whisper_model, device="cpu", compute_type="int8")
-            return model.transcribe(
-                source_wav,
-                language=whisper_language,
-                word_timestamps=True,
-                beam_size=5,
-                vad_filter=True,
-            )
+            return _transcribe_with("cpu", "int8")
 
     def _cleanup_broken_whisper_snapshot(err: Exception) -> bool:
         text = str(err)

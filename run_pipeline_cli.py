@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import traceback
+from pathlib import Path
 
 from pipeline_core import run_pipeline_from_json
 
@@ -73,8 +74,43 @@ def _prepare_media_tool_env() -> None:
         os.environ["FFPROBE_BIN"] = ffprobe
 
 
+def _prepare_hf_auth() -> None:
+    """
+    Configure Hugging Face token for model downloads.
+    Priority:
+    1) Existing process env vars.
+    2) Token file in user profile: ~/.auto_animator/hf_token.txt
+    """
+    token = (
+        os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    )
+
+    if not token:
+        token_file = Path.home() / ".auto_animator" / "hf_token.txt"
+        if token_file.is_file():
+            try:
+                token = token_file.read_text(encoding="utf-8").strip()
+            except Exception:
+                token = ""
+
+    if token:
+        os.environ["HF_TOKEN"] = token
+        os.environ["HUGGINGFACE_HUB_TOKEN"] = token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+        print("HF token найден: используем авторизованную загрузку моделей.", flush=True)
+    else:
+        print("HF token не найден: используем анонимную загрузку моделей.", flush=True)
+
+
 def main() -> int:
     _prepare_media_tool_env()
+    _prepare_hf_auth()
+    # Use stable HTTP download path in bundled app.
+    # Xet acceleration is optional and often unavailable in end-user setups.
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+    os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
     parser = argparse.ArgumentParser(description="Auto Animator pipeline CLI")
     parser.add_argument("--config", required=True, help="Path to JSON config file")
     args = parser.parse_args()

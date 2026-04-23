@@ -61,6 +61,11 @@ body {
   margin-bottom: 12px;
 }
 
+.updateBanner button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .updateBannerError {
   background: #3a1d24;
   border-color: #8a3b4c;
