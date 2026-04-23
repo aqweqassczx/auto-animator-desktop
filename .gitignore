@@ -5,3 +5,5 @@
 !.github/
 !.github/workflows/
 !.github/workflows/desktop-release.yml
+!run_pipeline_cli.py
+!pipeline_core.py
