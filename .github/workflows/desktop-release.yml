@@ -144,6 +144,52 @@ jobs:
           name: auto-animator-desktop-macos
           path: release-assets/macos
 
+      - name: Build updater manifest (latest.json)
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          mkdir -p release-assets/generated
+          PLATFORMS='{}'
+
+          WIN_ZIP="$(find release-assets/windows -type f -name '*.zip' | head -n 1 || true)"
+          if [ -n "${WIN_ZIP}" ] && [ -f "${WIN_ZIP}.sig" ]; then
+            WIN_NAME="$(basename "${WIN_ZIP}")"
+            WIN_SIG="$(tr -d '\r\n' < "${WIN_ZIP}.sig")"
+            PLATFORMS="$(jq --arg url "${BASE_URL}/${WIN_NAME}" --arg sig "${WIN_SIG}" '. + {"windows-x86_64":{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
+          fi
+
+          while IFS= read -r MAC_TAR; do
+            [ -z "${MAC_TAR}" ] && continue
+            [ ! -f "${MAC_TAR}.sig" ] && continue
+            MAC_NAME="$(basename "${MAC_TAR}")"
+            MAC_SIG="$(tr -d '\r\n' < "${MAC_TAR}.sig")"
+            PLATFORM_KEY="darwin-x86_64"
+            case "${MAC_NAME}" in
+              *aarch64*|*arm64*) PLATFORM_KEY="darwin-aarch64" ;;
+            esac
+            PLATFORMS="$(jq --arg key "${PLATFORM_KEY}" --arg url "${BASE_URL}/${MAC_NAME}" --arg sig "${MAC_SIG}" '. + {($key):{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
+          done < <(find release-assets/macos -type f -name '*.app.tar.gz' | sort)
+
+          if [ "$(jq 'length' <<< "${PLATFORMS}")" -eq 0 ]; then
+            echo "No updater artifacts found to build latest.json"
+            exit 1
+          fi
+
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg notes "Auto release ${TAG}" \
+            --arg pub_date "${PUB_DATE}" \
+            --argjson platforms "${PLATFORMS}" \
+            '{version:$version,notes:$notes,pub_date:$pub_date,platforms:$platforms}' \
+            > release-assets/generated/latest.json
+
+          echo "Generated release-assets/generated/latest.json"
+          cat release-assets/generated/latest.json
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -160,3 +206,4 @@ jobs:
             release-assets/macos/**/*.tar.gz
             release-assets/macos/**/*.sig
             release-assets/macos/**/latest*.json
+            release-assets/generated/latest.json

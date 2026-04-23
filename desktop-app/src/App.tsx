@@ -366,6 +366,14 @@ function App() {
         </section>
       )}
 
+      {updateStatus.checked && !updateStatus.available && updateStatus.error && (
+        <section className="updateBanner updateBannerError">
+          <div>
+            Не удалось проверить обновления: {updateStatus.error}
+          </div>
+        </section>
+      )}
+
       <section className="card">
         <div className="row">
           <label>Профиль</label>

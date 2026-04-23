@@ -55,6 +55,12 @@ body {
   margin-bottom: 12px;
 }
 
+.updateBannerError {
+  background: #3a1d24;
+  border-color: #8a3b4c;
+  color: #ffd8df;
+}
+
 .card {
   background: #121c2d;
   border: 1px solid #283a57;
