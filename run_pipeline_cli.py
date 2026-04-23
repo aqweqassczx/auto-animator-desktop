@@ -7,6 +7,45 @@ import traceback
 from pipeline_core import run_pipeline_from_json
 
 
+def _classify_error(exc: Exception) -> tuple[str, int, str]:
+    text = str(exc)
+    low = text.lower()
+
+    if "unable to open file 'model.bin'" in low:
+        return (
+            "WHISPER_MODEL_CACHE",
+            21,
+            "Поврежден или недокачан кэш Whisper-модели. Перезапусти задачу для повторной загрузки модели.",
+        )
+
+    if "no such file or directory" in low and ("ffmpeg" in low or "ffprobe" in low):
+        return (
+            "FFMPEG_NOT_FOUND",
+            22,
+            "Не найден ffmpeg/ffprobe. Проверь, что бинарники доступны приложению.",
+        )
+
+    if "no such file or directory" in low:
+        return (
+            "MISSING_INPUT_FILE",
+            23,
+            "Не найден входной файл или путь. Проверь аудио, сценарий и папки медиа.",
+        )
+
+    if "permission denied" in low or "access is denied" in low:
+        return (
+            "ACCESS_DENIED",
+            24,
+            "Нет прав доступа к файлам/папкам. Запусти с нужными правами или смени папку результата.",
+        )
+
+    return (
+        "PIPELINE_RUNTIME_ERROR",
+        1,
+        "Внутренняя ошибка пайплайна. Смотри traceback ниже.",
+    )
+
+
 def _prepare_media_tool_env() -> None:
     """
     Make ffmpeg/ffprobe discoverable when app is launched as GUI on macOS.
@@ -45,17 +84,20 @@ def main() -> int:
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
         return 0
     except Exception as exc:  # pylint: disable=broad-except
+        error_code, exit_code, hint = _classify_error(exc)
         print(
             json.dumps(
                 {
                     "ok": False,
+                    "error_code": error_code,
+                    "hint": hint,
                     "error": str(exc),
                     "traceback": traceback.format_exc(),
                 },
                 ensure_ascii=False,
             )
         )
-        return 1
+        return exit_code
 
 
 if __name__ == "__main__":

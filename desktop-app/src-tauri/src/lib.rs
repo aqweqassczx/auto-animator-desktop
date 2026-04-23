@@ -268,13 +268,33 @@ fn push_recent_line(store: &Arc<Mutex<Vec<String>>>, line: String) {
 fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
     let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
     value.get("ok")?;
+    let base_error = value
+        .get("error")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let error_code = value
+        .get("error_code")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let hint = value
+        .get("hint")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let composed_error = if let Some(code) = error_code {
+        let mut chunks: Vec<String> = vec![format!("[{}] {}", code, base_error.unwrap_or_default())];
+        if let Some(h) = hint {
+            if !h.trim().is_empty() {
+                chunks.push(format!("Что делать: {}", h));
+            }
+        }
+        Some(chunks.join("\n"))
+    } else {
+        base_error
+    };
     Some(PipelineFinishedPayload {
         ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
         result: value.get("result").cloned(),
-        error: value
-            .get("error")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+        error: composed_error,
         traceback: value
             .get("traceback")
             .and_then(|v| v.as_str())
