@@ -4,3 +4,4 @@ src-tauri/target
 .DS_Store
 .build-pipeline-runner
 src-tauri/runtime/pipeline_runner.exe
+src-tauri/runtime/pipeline_runner

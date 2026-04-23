@@ -77,8 +77,22 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify pipeline files
+        run: |
+          test -f ../run_pipeline_cli.py || (echo "Missing ../run_pipeline_cli.py" && exit 1)
+          test -f ../pipeline_core.py || (echo "Missing ../pipeline_core.py" && exit 1)
+          echo "Pipeline files found."
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Build bundled pipeline runner
+        run: bash ./tools/build_pipeline_runner.sh
 
       - name: Build Tauri app (DMG)
         env:
