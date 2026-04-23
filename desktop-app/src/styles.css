@@ -1,0 +1,272 @@
+:root {
+  font-family: Inter, Segoe UI, sans-serif;
+  color: #e6edf3;
+  background: #0b1220;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: #9fb0c5;
+}
+
+.status {
+  background: #13233a;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #b7c8dd;
+  font-size: 13px;
+}
+
+.updateBanner {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  background: #21355a;
+  border: 1px solid #30518a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.card {
+  background: #121c2d;
+  border: 1px solid #283a57;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 220px 1fr auto;
+  gap: 8px;
+  margin-bottom: 7px;
+  align-items: center;
+}
+
+.row.compact {
+  grid-template-columns: 130px 1fr;
+}
+
+.row.checkbox {
+  grid-template-columns: 1fr;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+input,
+select,
+textarea,
+button {
+  background: #0d1524;
+  color: #e6edf3;
+  border: 1px solid #344d76;
+  border-radius: 7px;
+  padding: 7px 9px;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #0f1f36;
+  border-color: #3f68a1;
+  box-shadow: inset 0 0 0 1px rgba(92, 141, 217, 0.12);
+  background-image:
+    linear-gradient(45deg, transparent 50%, #9dc2ff 50%),
+    linear-gradient(135deg, #9dc2ff 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 10px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+
+.xmlPartsSelect {
+  background-color: #102746;
+  border-color: #5a8ddb;
+  box-shadow: inset 0 0 0 1px rgba(122, 173, 255, 0.18);
+}
+
+.xmlPartsSelect:hover {
+  border-color: #7db0ff;
+  background-color: #143056;
+}
+
+.xmlPartsSelect:focus {
+  border-color: #8ec1ff;
+  box-shadow:
+    inset 0 0 0 1px rgba(142, 193, 255, 0.26),
+    0 0 0 2px rgba(142, 193, 255, 0.2);
+}
+
+select:hover {
+  border-color: #5c8dd9;
+  background-color: #122743;
+}
+
+select:focus {
+  outline: none;
+  border-color: #76a7ff;
+  box-shadow:
+    inset 0 0 0 1px rgba(118, 167, 255, 0.25),
+    0 0 0 2px rgba(118, 167, 255, 0.18);
+}
+
+option {
+  background: #10223b;
+  color: #e6edf3;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hintRow {
+  color: #9cb0cf;
+  font-size: 13px;
+}
+
+.mediaFoldersBox {
+  overflow: hidden;
+  resize: none;
+}
+
+.queueInfo {
+  color: #9cb0cf;
+  margin-bottom: 8px;
+}
+
+.jobsList {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  margin-bottom: 10px;
+}
+
+.jobCard {
+  border: 1px solid #2d456b;
+  border-radius: 10px;
+  padding: 10px;
+  background: #0f1828;
+}
+
+.jobCard.active {
+  border-color: #4e77b6;
+}
+
+.jobTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jobStatus {
+  text-transform: uppercase;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  border: 1px solid #3b577f;
+}
+
+.jobStatus.running {
+  background: #193256;
+}
+
+.jobStatus.done {
+  background: #1f4a34;
+}
+
+.jobStatus.failed,
+.jobStatus.cancelled {
+  background: #5a2323;
+}
+
+.jobStatus.queued {
+  background: #2a294f;
+}
+
+.jobStage {
+  margin: 6px 0;
+  color: #bcd0ec;
+}
+
+.progressWrap {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #1a2740;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #4d89e7, #75b2ff);
+}
+
+.jobMeta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #97aed0;
+}
+
+.jobError {
+  margin-top: 8px;
+  color: #ffb4b4;
+  font-size: 12px;
+}
+
+.logs pre {
+  max-height: 260px;
+  overflow: auto;
+  background: #0a111d;
+  border: 1px solid #24344f;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 0;
+}

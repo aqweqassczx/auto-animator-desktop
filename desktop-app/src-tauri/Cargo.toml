@@ -1,0 +1,19 @@
+[package]
+name = "auto_animator_desktop"
+version = "0.1.0"
+description = "Desktop UI for Auto Animator pipeline"
+authors = ["Auto Animator"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "1.6", features = [ "shell-execute", "dialog-all", "updater"] }
+uuid = { version = "1", features = ["v4"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

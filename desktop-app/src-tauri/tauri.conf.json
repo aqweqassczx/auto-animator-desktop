@@ -1,0 +1,55 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "Auto Animator Desktop",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "execute": true
+      },
+      "dialog": {
+        "all": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": ["msi", "updater"],
+      "identifier": "com.autoanimator.desktop",
+      "icon": ["icons/icon.ico"],
+      "resources": ["runtime"],
+      "windows": {
+        "wix": {
+          "language": "en-US"
+        }
+      }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/aqweqassczx/auto-animator-desktop/releases/latest/download/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVBQzNFRjBFQkEwMkUyNjYKUldSbTRnSzZEdS9EV280NS9RK25rTHBZRVl5UVJsQ0JhUU9yMWQ3YWNrUGtTWEFZSzBjZlpWc2EK"
+    },
+    "windows": [
+      {
+        "title": "Auto Animator Desktop",
+        "width": 1200,
+        "height": 900,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}

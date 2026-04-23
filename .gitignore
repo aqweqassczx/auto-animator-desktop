@@ -1,0 +1,7 @@
+﻿*
+!.gitignore
+!desktop-app/
+!desktop-app/**
+!.github/
+!.github/workflows/
+!.github/workflows/desktop-release.yml
