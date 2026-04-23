@@ -99,9 +99,9 @@ def _prepare_hf_auth() -> None:
         os.environ["HF_TOKEN"] = token
         os.environ["HUGGINGFACE_HUB_TOKEN"] = token
         os.environ["HUGGING_FACE_HUB_TOKEN"] = token
-        print("HF token найден: используем авторизованную загрузку моделей.", flush=True)
+        print("HF token detected: using authenticated model download.", flush=True)
     else:
-        print("HF token не найден: используем анонимную загрузку моделей.", flush=True)
+        print("HF token not found: using anonymous model download.", flush=True)
 
 
 def main() -> int:
