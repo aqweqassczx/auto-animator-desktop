@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from faster_whisper import WhisperModel
+from huggingface_hub import snapshot_download
 
 EXTS = (".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".mkv")
 ORDERED_FOLDERS = ["1", "2", "3", "4", "5", "6"]
@@ -231,6 +232,41 @@ def collect_assets_from_paths(asset_paths: list[str]) -> list[str]:
 
 
 def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str) -> list[dict[str, float | str]]:
+    def _resolve_whisper_repo(model_name: str) -> str:
+        normalized = (model_name or "").strip()
+        if not normalized:
+            normalized = "medium"
+        if "/" in normalized:
+            return normalized
+        return f"Systran/faster-whisper-{normalized}"
+
+    def _ensure_whisper_model_ready(model_name: str) -> None:
+        repo_id = _resolve_whisper_repo(model_name)
+        token = (
+            os.environ.get("HF_TOKEN")
+            or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+            or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        )
+        kwargs: dict[str, Any] = {
+            "repo_id": repo_id,
+            "local_dir_use_symlinks": False,
+            "resume_download": True,
+        }
+        if token:
+            kwargs["token"] = token
+
+        print(f"Проверяем/скачиваем Whisper-модель: {repo_id}", flush=True)
+        model_path = snapshot_download(**kwargs)
+        model_bin = os.path.join(model_path, "model.bin")
+        if not os.path.isfile(model_bin):
+            # If snapshot is incomplete, clear and download once more.
+            print(f"model.bin не найден после скачивания, очищаем и перекачиваем: {model_path}", flush=True)
+            shutil.rmtree(model_path, ignore_errors=True)
+            model_path = snapshot_download(**kwargs)
+            model_bin = os.path.join(model_path, "model.bin")
+            if not os.path.isfile(model_bin):
+                raise RuntimeError(f"Whisper model download incomplete: missing model.bin in {model_path}")
+
     def _run_whisper_once(source_wav: str):
         def _transcribe_with(device: str, compute_type: str):
             model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
@@ -288,8 +324,45 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             return False
         return False
 
+    def _cleanup_hf_model_cache(model_name: str) -> bool:
+        """
+        Deeper cleanup when snapshot-only cleanup is not enough.
+        Removes model repo cache under huggingface hub, e.g.
+        .../huggingface/hub/models--Systran--faster-whisper-medium
+        """
+        safe = model_name.replace("/", "--")
+        repo_dir_name = f"models--{safe}"
+        candidates: list[str] = []
+
+        hf_home = os.environ.get("HF_HOME", "").strip()
+        if hf_home:
+            candidates.append(os.path.join(hf_home, "hub", repo_dir_name))
+
+        if os.name == "nt":
+            local = os.environ.get("LOCALAPPDATA", "").strip()
+            profile = os.environ.get("USERPROFILE", "").strip()
+            if local:
+                candidates.append(os.path.join(local, "huggingface", "hub", repo_dir_name))
+            if profile:
+                candidates.append(os.path.join(profile, ".cache", "huggingface", "hub", repo_dir_name))
+        else:
+            home = os.path.expanduser("~")
+            candidates.append(os.path.join(home, ".cache", "huggingface", "hub", repo_dir_name))
+
+        removed_any = False
+        for path in dict.fromkeys([os.path.normpath(p) for p in candidates if p]):
+            try:
+                if os.path.isdir(path):
+                    print(f"Глубокая очистка кэша HF для модели: {path}", flush=True)
+                    shutil.rmtree(path, ignore_errors=True)
+                    removed_any = removed_any or (not os.path.exists(path))
+            except Exception:
+                continue
+        return removed_any
+
     temp_wav_path: str | None = None
     try:
+        _ensure_whisper_model_ready(whisper_model)
         # Нормализация аудио в WAV 16k mono снижает ошибки декодера ffmpeg/whisper.
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             temp_wav_path = tmp.name
@@ -312,7 +385,13 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             segments, _ = _run_whisper_once(temp_wav_path)
         except Exception as exc:
             if _cleanup_broken_whisper_snapshot(exc):
-                segments, _ = _run_whisper_once(temp_wav_path)
+                try:
+                    segments, _ = _run_whisper_once(temp_wav_path)
+                except Exception as exc_second:
+                    if _cleanup_hf_model_cache(whisper_model):
+                        segments, _ = _run_whisper_once(temp_wav_path)
+                    else:
+                        raise exc_second
             else:
                 raise
     finally:
