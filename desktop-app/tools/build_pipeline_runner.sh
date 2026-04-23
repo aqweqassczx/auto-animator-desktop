@@ -41,6 +41,8 @@ echo "Building pipeline_runner..."
   --noconfirm \
   --clean \
   --onefile \
+  --collect-all faster_whisper \
+  --collect-submodules faster_whisper \
   --exclude-module torch \
   --exclude-module torchvision \
   --exclude-module torchaudio \
@@ -66,4 +68,8 @@ if [[ ! -f "${BUILT_BIN}" ]]; then
 fi
 
 cp "${BUILT_BIN}" "${RUNTIME_DIR}/pipeline_runner"
+
+echo "Running smoke-check for pipeline_runner..."
+"${RUNTIME_DIR}/pipeline_runner" --help >/dev/null
+
 echo "Done: ${RUNTIME_DIR}/pipeline_runner"

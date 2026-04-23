@@ -42,6 +42,8 @@ Write-Host "Building pipeline_runner.exe..."
   --noconfirm `
   --clean `
   --onefile `
+  --collect-all faster_whisper `
+  --collect-submodules faster_whisper `
   --exclude-module torch `
   --exclude-module torchvision `
   --exclude-module torchaudio `
@@ -66,4 +68,11 @@ if (-not (Test-Path $builtExe)) {
 }
 
 Copy-Item $builtExe (Join-Path $runtimeDir "pipeline_runner.exe") -Force
+
+Write-Host "Running smoke-check for pipeline_runner.exe..."
+& (Join-Path $runtimeDir "pipeline_runner.exe") --help | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "pipeline_runner smoke-check failed"
+}
+
 Write-Host "Done: $runtimeDir\pipeline_runner.exe"
