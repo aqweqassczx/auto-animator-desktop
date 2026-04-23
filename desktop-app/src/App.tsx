@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/api/dialog";
 import { open as openPath } from "@tauri-apps/api/shell";
+import { getVersion } from "@tauri-apps/api/app";
 import { checkUpdate, installUpdate } from "@tauri-apps/api/updater";
 import {
   discoverMediaFolders,
@@ -124,6 +125,7 @@ function App() {
   const [runningRunId, setRunningRunId] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("Готово");
+  const [appVersion, setAppVersion] = useState<string>("");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     checked: false,
     available: false
@@ -156,6 +158,12 @@ function App() {
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  useEffect(() => {
+    void getVersion()
+      .then((v) => setAppVersion(v))
+      .catch(() => setAppVersion(""));
   }, []);
 
   useEffect(() => {
@@ -352,6 +360,7 @@ function App() {
         <div>
           <h1>Auto Animator Desktop</h1>
           <p>Очередь рендера и XML</p>
+          {appVersion && <p className="versionBadge">Версия приложения: v{appVersion}</p>}
         </div>
         <div className="status">{status}</div>
       </header>

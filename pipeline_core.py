@@ -265,10 +265,25 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         if not model_dir:
             return False
         try:
-            if os.path.isdir(model_dir):
-                print(f"Поврежден кэш модели Whisper, удаляем и пробуем снова: {model_dir}", flush=True)
-                shutil.rmtree(model_dir, ignore_errors=True)
-                return True
+            paths_to_remove: list[str] = []
+            normalized = os.path.normpath(model_dir)
+            if os.path.isdir(normalized):
+                paths_to_remove.append(normalized)
+            # If snapshot cleanup is not enough, remove the whole model repo cache.
+            # Example:
+            # ...\hub\models--Systran--faster-whisper-medium\snapshots\08e178...
+            snapshots_token = f"{os.sep}snapshots{os.sep}"
+            snap_idx = normalized.lower().find(snapshots_token.lower())
+            if snap_idx > 0:
+                repo_cache_dir = normalized[:snap_idx]
+                if os.path.isdir(repo_cache_dir):
+                    paths_to_remove.append(repo_cache_dir)
+            removed_any = False
+            for path in dict.fromkeys(paths_to_remove):
+                print(f"Поврежден кэш модели Whisper, удаляем: {path}", flush=True)
+                shutil.rmtree(path, ignore_errors=True)
+                removed_any = removed_any or (not os.path.exists(path))
+            return removed_any
         except Exception:
             return False
         return False

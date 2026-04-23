@@ -265,6 +265,23 @@ fn push_recent_line(store: &Arc<Mutex<Vec<String>>>, line: String) {
     }
 }
 
+fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
+    let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
+    value.get("ok")?;
+    Some(PipelineFinishedPayload {
+        ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+        result: value.get("result").cloned(),
+        error: value
+            .get("error")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        traceback: value
+            .get("traceback")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
 fn resolve_bundled_runner(app: &AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path_resolver().resource_dir()?;
     let file_name = if cfg!(target_os = "windows") {
@@ -378,23 +395,9 @@ fn start_pipeline_run(
             let reader = BufReader::new(stdout);
             for line in reader.lines().flatten() {
                 push_recent_line(&recent_for_out, line.clone());
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if value.get("ok").is_some() {
-                        let parsed = PipelineFinishedPayload {
-                            ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-                            result: value.get("result").cloned(),
-                            error: value
-                                .get("error")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string()),
-                            traceback: value
-                                .get("traceback")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string()),
-                        };
-                        if let Ok(mut lock) = result_for_out.lock() {
-                            *lock = Some(parsed);
-                        }
+                if let Some(parsed) = parse_pipeline_json_line(&line) {
+                    if let Ok(mut lock) = result_for_out.lock() {
+                        *lock = Some(parsed);
                     }
                 }
                 emit_log(&app_for_out, &run_out, line);
@@ -404,12 +407,18 @@ fn start_pipeline_run(
 
     let app_for_err = app.clone();
     let run_err = run_id.clone();
+    let result_for_err = result_payload.clone();
     let recent_for_err = recent_logs.clone();
     if let Some(stderr) = stderr {
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().flatten() {
                 push_recent_line(&recent_for_err, line.clone());
+                if let Some(parsed) = parse_pipeline_json_line(&line) {
+                    if let Ok(mut lock) = result_for_err.lock() {
+                        *lock = Some(parsed);
+                    }
+                }
                 emit_log(&app_for_err, &run_err, line);
             }
         });
@@ -464,21 +473,33 @@ fn start_pipeline_run(
                             .join("\n")
                     })
                     .unwrap_or_default();
+                let exit_code_label = status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
                 let default_error = if status.success() {
                     None
                 } else if fallback_tail.is_empty() {
-                    Some(format!("Пайплайн завершился с кодом {:?}", status.code()))
+                    Some(format!("Пайплайн завершился с кодом {}", exit_code_label))
                 } else {
                     Some(format!(
-                        "Пайплайн завершился с кодом {:?}\nПоследние строки лога:\n{}",
-                        status.code(),
+                        "Пайплайн завершился с кодом {}\nПоследние строки лога:\n{}",
+                        exit_code_label,
                         fallback_tail
                     ))
+                };
+                let effective_payload = if let Some(mut p) = payload {
+                    if !p.ok && p.error.as_deref().unwrap_or("").trim().is_empty() {
+                        p.error = default_error.clone();
+                    }
+                    Some(p)
+                } else {
+                    None
                 };
                 emit_finished(
                     &app_for_wait,
                     &run_wait,
-                    payload.unwrap_or_else(|| PipelineFinishedPayload {
+                    effective_payload.unwrap_or_else(|| PipelineFinishedPayload {
                         ok: status.success(),
                         result: None,
                         error: default_error,

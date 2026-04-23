@@ -35,6 +35,12 @@ body {
   color: #9fb0c5;
 }
 
+.versionBadge {
+  margin-top: 6px;
+  color: #7fc8ff;
+  font-size: 12px;
+}
+
 .status {
   background: #13233a;
   padding: 8px 10px;
