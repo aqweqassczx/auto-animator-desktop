@@ -14,6 +14,7 @@ from typing import Any
 
 from faster_whisper import WhisperModel
 from huggingface_hub import snapshot_download
+from huggingface_hub.utils import disable_progress_bars
 
 EXTS = (".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".mkv")
 ORDERED_FOLDERS = ["1", "2", "3", "4", "5", "6"]
@@ -241,6 +242,7 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         return f"Systran/faster-whisper-{normalized}"
 
     def _ensure_whisper_model_ready(model_name: str) -> str:
+        disable_progress_bars()
         repo_id = _resolve_whisper_repo(model_name)
         token = (
             os.environ.get("HF_TOKEN")

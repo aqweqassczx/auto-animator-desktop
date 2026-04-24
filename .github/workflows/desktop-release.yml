@@ -205,12 +205,17 @@ jobs:
           manifest = pathlib.Path("release-assets/generated/latest.json")
           data = json.loads(manifest.read_text(encoding="utf-8"))
           artifact_names = {p.name for p in pathlib.Path("release-assets").rglob("*") if p.is_file()}
+
+          def canon(n: str) -> str:
+            return n.replace(" ", ".")
+
+          artifact_canon = {canon(n) for n in artifact_names}
           missing = []
           for platform, row in data.get("platforms", {}).items():
             url = row.get("url", "")
             name = pathlib.Path(urllib.parse.urlparse(url).path).name
             decoded = urllib.parse.unquote(name)
-            if decoded not in artifact_names:
+            if decoded not in artifact_names and canon(decoded) not in artifact_canon:
               missing.append((platform, decoded))
           if missing:
             print("Updater manifest points to missing artifacts:")
