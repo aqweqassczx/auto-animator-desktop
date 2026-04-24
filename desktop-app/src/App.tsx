@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { open as openDialog } from "@tauri-apps/api/dialog";
 import { open as openPath } from "@tauri-apps/api/shell";
 import { getVersion } from "@tauri-apps/api/app";
@@ -165,7 +165,7 @@ function App() {
   }, [jobs]);
 
   useEffect(() => {
-    const onClick = (event: MouseEvent) => {
+    const onClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("button")) {
         playSoftClick();
@@ -382,7 +382,7 @@ function App() {
     setRunningRunId(null);
   };
 
-  const removeJobFromLibrary = async (job: LibraryJob, e: MouseEvent) => {
+  const removeJobFromLibrary = async (job: LibraryJob, e: ReactMouseEvent) => {
     e.stopPropagation();
     if (job.status === "running" && job.runId) {
       if (runningRunId === job.runId) {
