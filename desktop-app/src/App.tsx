@@ -46,9 +46,13 @@ type LibraryJob = {
   logs: string[];
   request: PipelineRunRequest;
   result?: {
+    outputDir: string;
     finalVideoPath: string | null;
     xmlPath: string | null;
     xmlParts?: string[];
+    phraseCount: number;
+    assetCount: number;
+    clipsPlanned: number;
     clipsRendered: number;
     clipsUsedInXml: number;
   };
@@ -104,12 +108,30 @@ function loadSavedJobs(): LibraryJob[] {
 
 function parseStageProgress(line: string): { progress: number; stageLabel: string } | null {
   const m = line.match(/\[(\d+)\/6\]\s*(.+)?/);
-  if (!m) return null;
-  const stage = Number(m[1]);
-  if (!Number.isFinite(stage) || stage < 1) return null;
-  const progress = Math.min(99, Math.max(1, Math.round((stage / 6) * 100)));
-  const stageLabel = (m[2] || "").trim() || `Этап ${stage}/6`;
-  return { progress, stageLabel };
+  if (m) {
+    const stage = Number(m[1]);
+    if (!Number.isFinite(stage) || stage < 1) return null;
+    const progress = Math.min(99, Math.max(1, Math.round((stage / 6) * 100)));
+    const stageLabel = (m[2] || "").trim() || `Этап ${stage}/6`;
+    return { progress, stageLabel };
+  }
+
+  // huggingface_hub progress line:
+  // Fetching 6 files:  17%|#6        | 1/6 [00:00<00:00, 6.57it/s]
+  const fetch = line.match(
+    /Fetching\s+\d+\s+files:\s+(\d+)%.*\[(\d+:\d+)<(\d+:\d+),\s*([^\]]+)\]/
+  );
+  if (!fetch) return null;
+  const pct = Number(fetch[1]);
+  const elapsed = fetch[2];
+  const eta = fetch[3];
+  const speed = fetch[4].trim();
+  if (!Number.isFinite(pct)) return null;
+  const stageProgress = 17 + Math.round((Math.max(0, Math.min(100, pct)) / 100) * 16);
+  return {
+    progress: Math.min(99, Math.max(1, stageProgress)),
+    stageLabel: `Скачивание модели: ${pct}% • ETA ${eta} • ${speed} • прошло ${elapsed}`
+  };
 }
 
 function playSoftClick() {
@@ -600,10 +622,18 @@ function App() {
               </div>
               <div className="jobMeta">{job.progress}%</div>
               <div className="buttonRow">
-                <button onClick={() => void openResultPath(job.request.outputBase)}>Открыть result</button>
+                <button onClick={() => void openResultPath(job.result?.outputDir || job.request.outputBase)}>
+                  Открыть result
+                </button>
                 <button onClick={() => void openResultPath(job.result?.xmlPath)}>Открыть XML</button>
                 <button onClick={() => void openResultPath(job.result?.finalVideoPath)}>Открыть видео</button>
               </div>
+              {job.result && (
+                <div className="jobMeta">
+                  Фраз: {job.result.phraseCount} • Картинок: {job.result.assetCount} • Клипов по плану:{" "}
+                  {job.result.clipsPlanned} • Клипов в XML: {job.result.clipsUsedInXml}
+                </div>
+              )}
               {job.error && <div className="jobError">{job.error}</div>}
             </article>
           ))}

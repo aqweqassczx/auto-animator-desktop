@@ -1862,6 +1862,10 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         xml_intervals_sec = [intervals[i] for i in ok_indices]
 
     result: dict[str, Any] = {
+        "outputDir": config.output_dir,
+        "phraseCount": phrase_count,
+        "assetCount": asset_count,
+        "clipsPlanned": len(tasks),
         "clipsRendered": len(rendered_clips) if config.processing_mode == "render" else 0,
         "clipsUsedInXml": len(rendered_clips),
         "clipsDir": clips_dir,

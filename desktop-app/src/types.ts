@@ -24,9 +24,13 @@ export interface PipelineRunHandle {
 export interface PipelineResultPayload {
   ok: boolean;
   result?: {
+    outputDir: string;
     finalVideoPath: string | null;
     xmlPath: string | null;
     xmlParts?: string[];
+    phraseCount: number;
+    assetCount: number;
+    clipsPlanned: number;
     clipsRendered: number;
     clipsUsedInXml: number;
   };
