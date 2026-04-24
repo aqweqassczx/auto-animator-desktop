@@ -267,7 +267,18 @@ fn push_recent_line(store: &Arc<Mutex<Vec<String>>>, line: String) {
 }
 
 fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
-    let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
+    let direct = serde_json::from_str::<serde_json::Value>(line).ok();
+    let value = if let Some(v) = direct {
+        v
+    } else {
+        let start = line.find('{')?;
+        let end = line.rfind('}')?;
+        if end <= start {
+            return None;
+        }
+        let slice = &line[start..=end];
+        serde_json::from_str::<serde_json::Value>(slice).ok()?
+    };
     value.get("ok")?;
     let base_error = value
         .get("error")
@@ -281,6 +292,10 @@ fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
         .get("hint")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let traceback = value
+        .get("traceback")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let composed_error = if let Some(code) = error_code {
         let mut chunks: Vec<String> = vec![format!("[{}] {}", code, base_error.unwrap_or_default())];
         if let Some(h) = hint {
@@ -288,18 +303,29 @@ fn parse_pipeline_json_line(line: &str) -> Option<PipelineFinishedPayload> {
                 chunks.push(format!("Что делать: {}", h));
             }
         }
+        if let Some(tb) = traceback.clone() {
+            let short_tb = tb.lines().take(12).collect::<Vec<&str>>().join("\n");
+            if !short_tb.trim().is_empty() {
+                chunks.push(format!("Трассировка:\n{}", short_tb));
+            }
+        }
         Some(chunks.join("\n"))
     } else {
-        base_error
+        match (base_error, traceback.clone()) {
+            (Some(err), Some(tb)) => {
+                let short_tb = tb.lines().take(12).collect::<Vec<&str>>().join("\n");
+                Some(format!("{}\nТрассировка:\n{}", err, short_tb))
+            }
+            (Some(err), None) => Some(err),
+            (None, Some(tb)) => Some(tb.lines().take(12).collect::<Vec<&str>>().join("\n")),
+            (None, None) => None,
+        }
     };
     Some(PipelineFinishedPayload {
         ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
         result: value.get("result").cloned(),
         error: composed_error,
-        traceback: value
-            .get("traceback")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+        traceback,
     })
 }
 
@@ -372,6 +398,7 @@ fn start_pipeline_run(
     });
 
     let temp_config_path = std::env::temp_dir().join(format!("auto_animator_{}.json", run_id));
+    let temp_result_path = std::env::temp_dir().join(format!("auto_animator_result_{}.json", run_id));
     fs::write(
         &temp_config_path,
         serde_json::to_vec_pretty(&config_json).map_err(|e| e.to_string())?,
@@ -390,7 +417,9 @@ fn start_pipeline_run(
         let mut bundled = Command::new(runner_path);
         bundled
             .arg("--config")
-            .arg(temp_config_path.to_string_lossy().to_string());
+            .arg(temp_config_path.to_string_lossy().to_string())
+            .arg("--result-file")
+            .arg(temp_result_path.to_string_lossy().to_string());
         bundled
     } else {
         let script_path = PathBuf::from(&request.project_root).join("run_pipeline_cli.py");
@@ -406,7 +435,9 @@ fn start_pipeline_run(
         fallback
             .arg(script_path)
             .arg("--config")
-            .arg(temp_config_path.to_string_lossy().to_string());
+            .arg(temp_config_path.to_string_lossy().to_string())
+            .arg("--result-file")
+            .arg(temp_result_path.to_string_lossy().to_string());
         fallback
     };
     cmd.stdout(Stdio::piped())
@@ -475,6 +506,8 @@ fn start_pipeline_run(
     let finished_for_wait = state.finished.clone();
     let result_for_wait = result_payload.clone();
     let recent_for_wait = recent_logs.clone();
+    let config_path_for_wait = temp_config_path.clone();
+    let result_path_for_wait = temp_result_path.clone();
     std::thread::spawn(move || {
         let exit_status = {
             let mut child_guard = match child_arc.lock() {
@@ -506,7 +539,11 @@ fn start_pipeline_run(
 
         match exit_status {
             Ok(status) => {
-                let payload = result_for_wait.lock().ok().and_then(|v| v.clone());
+                let file_payload = fs::read_to_string(&result_path_for_wait)
+                    .ok()
+                    .and_then(|content| parse_pipeline_json_line(content.trim()));
+                let payload = file_payload
+                    .or_else(|| result_for_wait.lock().ok().and_then(|v| v.clone()));
                 let fallback_tail = recent_for_wait
                     .lock()
                     .ok()
@@ -550,6 +587,8 @@ fn start_pipeline_run(
                 if let Ok(mut done) = finished_for_wait.lock() {
                     done.insert(run_wait.clone(), final_payload);
                 }
+                let _ = fs::remove_file(&result_path_for_wait);
+                let _ = fs::remove_file(&config_path_for_wait);
             }
             Err(err) => {
                 let payload = PipelineFinishedPayload {
@@ -566,6 +605,8 @@ fn start_pipeline_run(
                     &run_wait,
                     payload,
                 );
+                let _ = fs::remove_file(&result_path_for_wait);
+                let _ = fs::remove_file(&config_path_for_wait);
             }
         }
     });

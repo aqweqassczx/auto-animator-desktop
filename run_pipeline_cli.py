@@ -113,26 +113,39 @@ def main() -> int:
     os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
     parser = argparse.ArgumentParser(description="Auto Animator pipeline CLI")
     parser.add_argument("--config", required=True, help="Path to JSON config file")
+    parser.add_argument("--result-file", required=False, help="Path to JSON result file")
     args = parser.parse_args()
+
+    def _write_result(payload: dict) -> None:
+        result_file = getattr(args, "result_file", None)
+        if not result_file:
+            return
+        try:
+            result_path = Path(result_file)
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            # Do not shadow the original pipeline result if writing fails.
+            pass
 
     try:
         result = run_pipeline_from_json(args.config)
-        print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
+        payload = {"ok": True, "result": result}
+        _write_result(payload)
+        print(json.dumps(payload, ensure_ascii=False))
         return 0
     except Exception as exc:  # pylint: disable=broad-except
         error_code, exit_code, hint = _classify_error(exc)
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error_code": error_code,
-                    "hint": hint,
-                    "error": str(exc),
-                    "traceback": traceback.format_exc(),
-                },
-                ensure_ascii=False,
-            )
-        )
+        payload = {
+            "ok": False,
+            "error_code": error_code,
+            "hint": hint,
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+            "exit_code": exit_code,
+        }
+        _write_result(payload)
+        print(json.dumps(payload, ensure_ascii=False))
         return exit_code
 
 
