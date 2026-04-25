@@ -241,6 +241,12 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             return normalized
         return f"Systran/faster-whisper-{normalized}"
 
+    def _find_model_asset(model_path: str, file_name: str) -> str | None:
+        for root, _dirs, files in os.walk(model_path):
+            if file_name in files:
+                return os.path.join(root, file_name)
+        return None
+
     def _ensure_whisper_model_ready(model_name: str) -> str:
         disable_progress_bars()
         repo_id = _resolve_whisper_repo(model_name)
@@ -257,26 +263,57 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         model_path = snapshot_download(**kwargs)
         model_path = os.path.abspath(model_path)
         model_bin = os.path.join(model_path, "model.bin")
-        if not os.path.isfile(model_bin):
-            # If snapshot is incomplete, clear and download once more.
-            print(f"model.bin не найден после скачивания, очищаем и перекачиваем: {model_path}", flush=True)
-            shutil.rmtree(model_path, ignore_errors=True)
-            model_path = os.path.abspath(snapshot_download(**kwargs))
-            model_bin = os.path.join(model_path, "model.bin")
+        vad_asset = _find_model_asset(model_path, "silero_vad_v6.onnx")
+        if not os.path.isfile(model_bin) or not vad_asset:
+            # If snapshot is incomplete, clear and force-download once more.
+            missing = []
             if not os.path.isfile(model_bin):
-                raise RuntimeError(f"Whisper model download incomplete: missing model.bin in {model_path}")
+                missing.append("model.bin")
+            if not vad_asset:
+                missing.append("silero_vad_v6.onnx")
+            print(
+                f"Отсутствуют файлы модели ({', '.join(missing)}), очищаем и перекачиваем: {model_path}",
+                flush=True,
+            )
+            shutil.rmtree(model_path, ignore_errors=True)
+            retry_kwargs = dict(kwargs)
+            retry_kwargs["force_download"] = True
+            model_path = os.path.abspath(snapshot_download(**retry_kwargs))
+            model_bin = os.path.join(model_path, "model.bin")
+            vad_asset = _find_model_asset(model_path, "silero_vad_v6.onnx")
+            missing_after_retry = []
+            if not os.path.isfile(model_bin):
+                missing_after_retry.append("model.bin")
+            if not vad_asset:
+                missing_after_retry.append("silero_vad_v6.onnx")
+            if missing_after_retry:
+                raise RuntimeError(
+                    f"Whisper model download incomplete: missing {', '.join(missing_after_retry)} in {model_path}"
+                )
         return model_path
 
     def _run_whisper_once(source_wav: str, local_model_dir: str):
         def _transcribe_with(device: str, compute_type: str):
             model = WhisperModel(local_model_dir, device=device, compute_type=compute_type)
-            segments_iter, info = model.transcribe(
-                source_wav,
-                language=whisper_language,
-                word_timestamps=True,
-                beam_size=5,
-                vad_filter=True,
-            )
+            transcribe_kwargs: dict[str, Any] = {
+                "language": whisper_language,
+                "word_timestamps": True,
+                "beam_size": 5,
+                "vad_filter": True,
+            }
+            try:
+                segments_iter, info = model.transcribe(source_wav, **transcribe_kwargs)
+            except Exception as exc:
+                err = str(exc)
+                if "silero_vad_v6.onnx" in err or "onnxruntimeerror" in err.lower():
+                    print(
+                        "VAD assets недоступны в bundled runtime, повторяем распознавание без VAD...",
+                        flush=True,
+                    )
+                    transcribe_kwargs["vad_filter"] = False
+                    segments_iter, info = model.transcribe(source_wav, **transcribe_kwargs)
+                else:
+                    raise
             # Materialize here to catch lazy runtime failures (e.g. missing CUDA libs)
             # inside this function so CPU fallback is guaranteed.
             segments = list(segments_iter)
