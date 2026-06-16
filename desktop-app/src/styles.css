@@ -309,3 +309,109 @@ button:disabled {
   padding: 10px;
   margin: 0;
 }
+
+.whisperModelSection {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #24344f;
+}
+
+.whisperModelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.whisperModelHeader h4 {
+  margin: 0;
+}
+
+.whisperModelHint {
+  margin: 0 0 10px;
+  color: #f0c674;
+  font-size: 13px;
+}
+
+.runtimeBadge {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  border: 1px solid #3a4455;
+  background: #1a2230;
+  color: #c8d4e8;
+}
+
+.runtimeBadge-cuda,
+.runtimeBadge-mlx {
+  border-color: #2d6a4f;
+  background: #14261c;
+  color: #95d5b2;
+}
+
+.runtimeBadge-mlx_pending,
+.runtimeBadge-cpu {
+  border-color: #7f6b2f;
+  background: #2a2414;
+  color: #f0c674;
+}
+
+.runtimeBadge-bundled {
+  border-color: #7f2f2f;
+  background: #2a1414;
+  color: #ffb4b4;
+}
+
+.whisperModelError {
+  margin: 0 0 10px;
+  color: #ffb4b4;
+  font-size: 13px;
+}
+
+.whisperModelList {
+  display: grid;
+  gap: 8px;
+}
+
+.whisperModelOption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #2d4466;
+  border-radius: 10px;
+  background: #0f1828;
+  cursor: pointer;
+}
+
+.whisperModelOption input {
+  grid-row: 1 / span 2;
+}
+
+.whisperModelOption.selected {
+  border-color: #5b9dff;
+  background: #152742;
+}
+
+.whisperModelOption.installed {
+  border-left: 3px solid #3ecf8e;
+}
+
+.whisperModelOption.remote {
+  border-left: 3px solid #6b7280;
+}
+
+.whisperModelTitle {
+  font-weight: 600;
+}
+
+.whisperModelMeta {
+  grid-column: 2;
+  font-size: 12px;
+  color: #97aed0;
+}

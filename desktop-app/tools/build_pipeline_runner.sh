@@ -73,3 +73,12 @@ echo "Running smoke-check for pipeline_runner..."
 "${RUNTIME_DIR}/pipeline_runner" --help >/dev/null
 
 echo "Done: ${RUNTIME_DIR}/pipeline_runner"
+
+if [[ "$(uname -m)" == "arm64" ]]; then
+  echo "Setting up Mac Apple Silicon runtime (MLX)..."
+  bash "${SCRIPT_DIR}/setup_mac_runtime.sh" "${PYTHON_BIN}"
+else
+  echo "Copying pipeline scripts for bundled runtime..."
+  cp "${PROJECT_ROOT}/run_pipeline_cli.py" "${RUNTIME_DIR}/"
+  cp "${PROJECT_ROOT}/pipeline_core.py" "${RUNTIME_DIR}/"
+fi

@@ -5,3 +5,6 @@ src-tauri/target
 .build-pipeline-runner
 src-tauri/runtime/pipeline_runner.exe
 src-tauri/runtime/pipeline_runner
+src-tauri/runtime/mac-venv
+src-tauri/runtime/run_pipeline_cli.py
+src-tauri/runtime/pipeline_core.py

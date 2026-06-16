@@ -5,8 +5,21 @@ import type {
   DiscoverPathsResult,
   PipelineResultPayload,
   PipelineRunHandle,
-  PipelineRunRequest
+  PipelineRunRequest,
+  PipelineRuntimeInfo,
+  WhisperModelOption
 } from "../types";
+
+export async function listWhisperModels(): Promise<WhisperModelOption[]> {
+  return invoke("list_whisper_models");
+}
+
+export async function getPipelineRuntimeInfo(
+  projectRoot: string,
+  pythonBin = "python"
+): Promise<PipelineRuntimeInfo> {
+  return invoke("get_pipeline_runtime_info", { projectRoot, pythonBin });
+}
 
 export async function discoverPaths(projectRoot: string): Promise<DiscoverPathsResult> {
   return invoke("discover_paths", { projectRoot });

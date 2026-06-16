@@ -7,18 +7,26 @@ import {
   discoverMediaFolders,
   discoverPaths,
   getPipelineResult,
+  getPipelineRuntimeInfo,
+  listWhisperModels,
   listenPipelineFinished,
   listenPipelineLogs,
   startPipelineRun,
   stopPipelineRun
 } from "./lib/api";
-import type { PipelineRunRequest, ProcessingMode, UpdateStatus, WhisperLanguage } from "./types";
+import type {
+  PipelineRunRequest,
+  PipelineRuntimeInfo,
+  ProcessingMode,
+  UpdateStatus,
+  WhisperLanguage,
+  WhisperModelOption
+} from "./types";
 
 const STORAGE_CONFIG_KEY = "auto-animator-desktop-last-config";
 const STORAGE_JOBS_KEY = "auto-animator-desktop-jobs";
 
 const DEFAULT_PYTHON = "python";
-const DEFAULT_WHISPER_MODEL = "medium";
 const DEFAULT_MAX_PARALLEL_CLIPS = 6;
 
 type ConfigState = {
@@ -29,6 +37,7 @@ type ConfigState = {
   scenarioFile: string;
   outputBase: string;
   whisperLanguage: WhisperLanguage;
+  whisperModel: string;
   xmlParts: number;
   processingMode: ProcessingMode;
   renderVideo: boolean;
@@ -72,6 +81,7 @@ const defaultState: ConfigState = {
   scenarioFile: "",
   outputBase: "",
   whisperLanguage: "en",
+  whisperModel: "",
   xmlParts: 3,
   processingMode: "render",
   renderVideo: false
@@ -167,6 +177,38 @@ function App() {
     checked: false,
     available: false
   });
+  const [whisperModels, setWhisperModels] = useState<WhisperModelOption[]>([]);
+  const [whisperModelsLoading, setWhisperModelsLoading] = useState(false);
+  const [whisperModelsError, setWhisperModelsError] = useState("");
+  const [runtimeInfo, setRuntimeInfo] = useState<PipelineRuntimeInfo | null>(null);
+
+  const refreshRuntimeInfo = async (projectRoot = config.projectRoot) => {
+    try {
+      const info = await getPipelineRuntimeInfo(projectRoot || ".", DEFAULT_PYTHON);
+      setRuntimeInfo(info);
+    } catch {
+      setRuntimeInfo(null);
+    }
+  };
+
+  const refreshWhisperModels = async () => {
+    setWhisperModelsLoading(true);
+    setWhisperModelsError("");
+    try {
+      const models = await listWhisperModels();
+      setWhisperModels(models);
+      setConfig((prev) => {
+        if (prev.whisperModel && !models.some((m) => m.id === prev.whisperModel)) {
+          return { ...prev, whisperModel: "" };
+        }
+        return prev;
+      });
+    } catch (error) {
+      setWhisperModelsError(String(error));
+    } finally {
+      setWhisperModelsLoading(false);
+    }
+  };
 
   const canRun = useMemo(() => {
     return (
@@ -174,9 +216,19 @@ function App() {
       !!config.scenarioFile &&
       !!config.outputBase &&
       config.mediaFolders.length > 0 &&
+      !!config.whisperModel &&
       !runningRunId
     );
   }, [config, runningRunId]);
+
+  useEffect(() => {
+    void refreshWhisperModels();
+    void refreshRuntimeInfo();
+  }, []);
+
+  useEffect(() => {
+    void refreshRuntimeInfo(config.projectRoot);
+  }, [config.projectRoot]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
@@ -244,6 +296,7 @@ function App() {
 
   const enqueueCurrentConfig = () => {
     if (!canRun) return;
+    const selectedModel = whisperModels.find((m) => m.id === config.whisperModel);
     const request: PipelineRunRequest = {
       pythonBin: DEFAULT_PYTHON,
       projectRoot: config.projectRoot,
@@ -255,7 +308,9 @@ function App() {
       renderVideo: config.processingMode === "render" ? config.renderVideo : false,
       xmlParts: config.xmlParts,
       maxParallelClips: DEFAULT_MAX_PARALLEL_CLIPS,
-      whisperModel: DEFAULT_WHISPER_MODEL,
+      whisperModel: config.whisperModel,
+      whisperModelCachePath:
+        selectedModel?.installed && selectedModel.cachePath ? selectedModel.cachePath : null,
       whisperLanguage: config.whisperLanguage,
       alignMode: "block_forced"
     };
@@ -394,9 +449,9 @@ function App() {
     setField("outputBase", path);
   };
 
-  const stopRun = async () => {
+  const stopRun = () => {
     if (!runningRunId) return;
-    await stopPipelineRun(runningRunId);
+    void stopPipelineRun(runningRunId);
     if (activeJobId) {
       updateJob(activeJobId, (j) => ({ ...j, status: "cancelled", stageLabel: "Остановлено" }));
     }
@@ -404,11 +459,11 @@ function App() {
     setRunningRunId(null);
   };
 
-  const removeJobFromLibrary = async (job: LibraryJob, e: ReactMouseEvent) => {
+  const removeJobFromLibrary = (job: LibraryJob, e: ReactMouseEvent) => {
     e.stopPropagation();
     if (job.status === "running" && job.runId) {
+      void stopPipelineRun(job.runId).catch(() => undefined);
       if (runningRunId === job.runId) {
-        await stopPipelineRun(job.runId);
         setRunningRunId(null);
       }
     }
@@ -641,6 +696,67 @@ function App() {
         </div>
         <h4>Логи выбранной задачи</h4>
         <pre>{activeJob?.logs.join("\n") || ""}</pre>
+
+        <div className="whisperModelSection">
+          <div className="whisperModelHeader">
+            <h4>Модель Whisper</h4>
+            <button
+              type="button"
+              onClick={() => {
+                void refreshWhisperModels();
+                void refreshRuntimeInfo();
+              }}
+              disabled={whisperModelsLoading}
+            >
+              {whisperModelsLoading ? "Сканируем..." : "Обновить список"}
+            </button>
+          </div>
+          {runtimeInfo && (
+            <p className={`runtimeBadge runtimeBadge-${runtimeInfo.backend}`}>
+              Whisper: {runtimeInfo.backend === "cuda" && "NVIDIA CUDA (GPU)"}
+              {runtimeInfo.backend === "mlx" && "Apple MLX (GPU)"}
+              {runtimeInfo.backend === "mlx_pending" && "Apple MLX (установится при запуске)"}
+              {runtimeInfo.backend === "cpu" && "CPU (без GPU)"}
+              {runtimeInfo.backend === "bundled" && "встроенный runner (CPU only)"}
+              {!["cuda", "mlx", "mlx_pending", "cpu", "bundled"].includes(runtimeInfo.backend) &&
+                runtimeInfo.backend}
+              {" · "}
+              {runtimeInfo.hint}
+            </p>
+          )}
+          {!config.whisperModel && (
+            <p className="whisperModelHint">
+              Выбери модель перед запуском. Установленные модели отмечены как «в кэше» и не будут качаться заново.
+            </p>
+          )}
+          {whisperModelsError && <p className="whisperModelError">{whisperModelsError}</p>}
+          <div className="whisperModelList">
+            {whisperModels.map((model) => (
+              <label
+                key={model.id}
+                className={`whisperModelOption ${config.whisperModel === model.id ? "selected" : ""} ${
+                  model.installed ? "installed" : "remote"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="whisperModel"
+                  value={model.id}
+                  checked={config.whisperModel === model.id}
+                  onChange={() => setField("whisperModel", model.id)}
+                />
+                <span className="whisperModelTitle">{model.label}</span>
+                <span className="whisperModelMeta">
+                  {model.id}
+                  {model.installed ? " • в кэше" : " • скачается при запуске"}
+                </span>
+              </label>
+            ))}
+            {!whisperModels.length && !whisperModelsLoading && (
+              <div className="hintRow">Модели не найдены. Нажми «Обновить список».</div>
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );

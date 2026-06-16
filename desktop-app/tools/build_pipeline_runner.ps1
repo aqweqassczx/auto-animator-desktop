@@ -76,3 +76,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Done: $runtimeDir\pipeline_runner.exe"
+
+Write-Host "Copying pipeline scripts into runtime..."
+Copy-Item (Join-Path $projectRoot "run_pipeline_cli.py") (Join-Path $runtimeDir "run_pipeline_cli.py") -Force
+Copy-Item (Join-Path $projectRoot "pipeline_core.py") (Join-Path $runtimeDir "pipeline_core.py") -Force

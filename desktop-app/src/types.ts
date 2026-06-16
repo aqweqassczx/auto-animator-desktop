@@ -13,8 +13,20 @@ export interface PipelineRunRequest {
   xmlParts: number;
   maxParallelClips: number;
   whisperModel: string;
+  whisperModelCachePath?: string | null;
   whisperLanguage: WhisperLanguage;
   alignMode: "block_forced";
+}
+
+export interface PipelineRuntimeInfo {
+  platform: string;
+  pythonBin: string;
+  scriptFound: boolean;
+  cudaAvailable: boolean;
+  mlxAvailable: boolean;
+  appleSilicon: boolean;
+  backend: "cuda" | "mlx" | "mlx_pending" | "cpu" | "bundled" | string;
+  hint: string;
 }
 
 export interface PipelineRunHandle {
@@ -55,4 +67,11 @@ export interface UpdateStatus {
   version?: string;
   body?: string;
   error?: string;
+}
+
+export interface WhisperModelOption {
+  id: string;
+  label: string;
+  installed: boolean;
+  cachePath?: string | null;
 }
