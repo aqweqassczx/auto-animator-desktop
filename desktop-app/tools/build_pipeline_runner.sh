@@ -14,8 +14,18 @@ echo "Desktop app dir: ${DESKTOP_APP_DIR}"
 echo "Project root: ${PROJECT_ROOT}"
 echo "Preparing runtime dir: ${RUNTIME_DIR}"
 
+mkdir -p "${RUNTIME_DIR}"
+
+# Mac M-серии: приложение запускает mac-venv/bin/python + скрипты, не pipeline_runner.
+# PyInstaller здесь только тратит 5–10 мин и на CI часто зависает — пропускаем.
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+  echo "Mac Apple Silicon: PyInstaller skipped (runtime = mac-venv + MLX)..."
+  bash "${SCRIPT_DIR}/setup_mac_runtime.sh" "${PYTHON_BIN}"
+  exit 0
+fi
+
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}" "${RUNTIME_DIR}"
+mkdir -p "${BUILD_DIR}"
 
 echo "Creating isolated virtual environment..."
 "${PYTHON_BIN}" -m venv "${VENV_DIR}"
@@ -74,11 +84,6 @@ echo "Running smoke-check for pipeline_runner..."
 
 echo "Done: ${RUNTIME_DIR}/pipeline_runner"
 
-if [[ "$(uname -m)" == "arm64" ]]; then
-  echo "Setting up Mac Apple Silicon runtime (MLX)..."
-  bash "${SCRIPT_DIR}/setup_mac_runtime.sh" "${PYTHON_BIN}"
-else
-  echo "Copying pipeline scripts for bundled runtime..."
-  cp "${PROJECT_ROOT}/run_pipeline_cli.py" "${RUNTIME_DIR}/"
-  cp "${PROJECT_ROOT}/pipeline_core.py" "${RUNTIME_DIR}/"
-fi
+echo "Copying pipeline scripts for bundled runtime..."
+cp "${PROJECT_ROOT}/run_pipeline_cli.py" "${RUNTIME_DIR}/"
+cp "${PROJECT_ROOT}/pipeline_core.py" "${RUNTIME_DIR}/"

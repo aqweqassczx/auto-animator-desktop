@@ -33,7 +33,7 @@ if [[ ! -f "${VENV_PYTHON}" ]]; then
 fi
 
 "${VENV_PYTHON}" -m pip install --upgrade pip
-"${VENV_PYTHON}" -m pip install \
+"${VENV_PYTHON}" -m pip install --default-timeout=120 \
   "mlx-whisper" \
   "mlx" \
   "huggingface_hub" \
