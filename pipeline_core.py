@@ -37,6 +37,51 @@ BLOCK_FORCED_MAX_MATCH_AUDIO_SPAN_SEC = 30.0
 BLOCK_FORCED_MAX_WHISPER_WORD_SPAN_RATIO = 4.0
 BLOCK_FORCED_MAX_WHISPER_WORD_SPAN_ABSOLUTE = 55
 
+# block_forced matching: time window, tail-guard, display caps
+MATCH_TIME_AHEAD_FACTOR_STRICT = 5.0
+MATCH_TIME_AHEAD_FACTOR_RESCUE = 2.5
+MATCH_TIME_AHEAD_GAP_CAP_SEC = 45.0
+RESCUE_TAIL_AUDIO_FRACTION = 0.88
+RESCUE_TAIL_REMAIN_SENT_FRACTION = 0.15
+RESCUE_TAIL_MIN_COVERAGE = 0.40
+RESCUE_AHEAD_WORDS = 200
+RESCUE_COV_DEFAULT = 0.38
+RESCUE_COV_SHORT = 0.50
+SHORT_PHRASE_TOKEN_MAX = 4
+MAX_CLIP_DISPLAY_SEC = 25.0
+ZERO_CLIP_WARN_RATIO = 0.30
+MATCH_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "to",
+        "of",
+        "in",
+        "on",
+        "at",
+        "is",
+        "was",
+        "it",
+        "i",
+        "he",
+        "she",
+        "we",
+        "they",
+        "you",
+        "me",
+        "my",
+        "his",
+        "her",
+        "its",
+        "our",
+        "your",
+        "their",
+    }
+)
+
 @dataclass
 class PipelineConfig:
     audio_file: str
@@ -58,6 +103,7 @@ class PipelineConfig:
     xml_parts: int = 3
     processing_mode: str = "render"
     align_mode: str = "block_forced"
+    whisper_model_cache_path: str | None = None
 
 
 def natural_sort_key(value: str) -> list[Any]:
@@ -232,14 +278,148 @@ def collect_assets_from_paths(asset_paths: list[str]) -> list[str]:
     return assets
 
 
-def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str) -> list[dict[str, float | str]]:
+def _is_apple_silicon() -> bool:
+    return platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aarch64"}
+
+
+def _mlx_whisper_repo(model_name: str) -> str:
+    normalized = (model_name or "medium").strip()
+    if normalized == "large-v3-turbo":
+        return "mlx-community/whisper-large-v3-turbo"
+    if normalized == "large-v3":
+        return "mlx-community/whisper-large-v3-mlx"
+    if normalized.startswith("mlx-community/"):
+        return normalized
+    return f"mlx-community/whisper-{normalized}-mlx"
+
+
+def _mlx_whisper_available() -> bool:
+    try:
+        import mlx_whisper  # noqa: F401, PLC0415
+
+        return _is_apple_silicon()
+    except ImportError:
+        return False
+
+
+def log_whisper_runtime_plan() -> None:
+    """Печатает, какой backend Whisper будет использован (CUDA / MLX / CPU)."""
+    if _is_apple_silicon():
+        if _mlx_whisper_available():
+            print("Whisper runtime: Apple Silicon MLX (GPU)", flush=True)
+        else:
+            print(
+                "Whisper runtime: Apple Silicon — MLX будет установлен/проверен при транскрипции",
+                flush=True,
+            )
+        return
+    try:
+        import ctranslate2  # noqa: PLC0415
+
+        cuda_count = ctranslate2.get_cuda_device_count()
+        if cuda_count > 0:
+            print(f"Whisper runtime: NVIDIA CUDA (GPU), устройств: {cuda_count}", flush=True)
+            return
+    except Exception as exc:
+        print(f"Whisper runtime: CUDA недоступна ({exc})", flush=True)
+    print("Whisper runtime: CPU (int8) — GPU не найдена", flush=True)
+
+
+def ensure_apple_silicon_mlx_runtime() -> None:
+    """
+    На Mac M1/M2/M3 Whisper идёт только через MLX (GPU).
+    При первом запуске ставим mlx-whisper в текущий Python автоматически.
+    """
+    if not _is_apple_silicon():
+        return
+    if _mlx_whisper_available():
+        print("Mac Apple Silicon: MLX-whisper готов (GPU).", flush=True)
+        return
+
+    import sys
+
+    print(
+        "Mac Apple Silicon: MLX-whisper не найден, устанавливаем для GPU-ускорения...",
+        flush=True,
+    )
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
+        check=False,
+    )
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "mlx-whisper", "mlx"],
+        check=True,
+    )
+    if not _mlx_whisper_available():
+        raise RuntimeError(
+            "На Mac Apple Silicon нужен mlx-whisper для GPU. "
+            "Не удалось установить автоматически. "
+            "Запусти в терминале: python3 -m pip install mlx-whisper mlx"
+        )
+    print("Mac Apple Silicon: MLX-whisper установлен.", flush=True)
+
+
+def transcribe_words(
+    audio_file: str,
+    whisper_model: str,
+    whisper_language: str,
+    whisper_model_cache_path: str | None = None,
+) -> list[dict[str, float | str]]:
     def _resolve_whisper_repo(model_name: str) -> str:
         normalized = (model_name or "").strip()
         if not normalized:
             normalized = "medium"
         if "/" in normalized:
             return normalized
+        if normalized == "large-v3-turbo":
+            return "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
         return f"Systran/faster-whisper-{normalized}"
+
+    def _hf_hub_cache_dirs() -> list[str]:
+        dirs: list[str] = []
+        hf_home = os.environ.get("HF_HOME")
+        if hf_home:
+            hub = os.path.join(hf_home, "hub")
+            if os.path.isdir(hub):
+                dirs.append(hub)
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            hub = os.path.join(local, "huggingface", "hub")
+            if os.path.isdir(hub):
+                dirs.append(hub)
+        home = os.path.expanduser("~")
+        hub = os.path.join(home, ".cache", "huggingface", "hub")
+        if os.path.isdir(hub):
+            dirs.append(hub)
+        return list(dict.fromkeys(dirs))
+
+    def _model_name_to_cache_suffix(model_name: str) -> str:
+        normalized = (model_name or "").strip() or "medium"
+        if "/" in normalized:
+            tail = normalized.split("/")[-1]
+            if tail.startswith("faster-whisper-"):
+                return tail[len("faster-whisper-") :]
+            return tail
+        return normalized
+
+    def _find_cached_whisper_snapshot(model_name: str) -> str | None:
+        suffix = _model_name_to_cache_suffix(model_name)
+        marker = f"--faster-whisper-{suffix}"
+        for hub in _hf_hub_cache_dirs():
+            try:
+                for repo_dir_name in os.listdir(hub):
+                    if marker not in repo_dir_name:
+                        continue
+                    snapshots = os.path.join(hub, repo_dir_name, "snapshots")
+                    if not os.path.isdir(snapshots):
+                        continue
+                    for snap_name in os.listdir(snapshots):
+                        snap_path = os.path.join(snapshots, snap_name)
+                        if os.path.isfile(os.path.join(snap_path, "model.bin")):
+                            return os.path.abspath(snap_path)
+            except OSError:
+                continue
+        return None
 
     def _find_model_asset(model_path: str, file_name: str) -> str | None:
         for root, _dirs, files in os.walk(model_path):
@@ -247,8 +427,33 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
                 return os.path.join(root, file_name)
         return None
 
+    def _find_vad_asset() -> str | None:
+        """VAD лежит в пакете faster_whisper, не в snapshot HF-модели."""
+        try:
+            import faster_whisper  # noqa: PLC0415
+
+            assets_dir = os.path.join(os.path.dirname(faster_whisper.__file__), "assets")
+            candidate = os.path.join(assets_dir, "silero_vad_v6.onnx")
+            if os.path.isfile(candidate):
+                return candidate
+        except Exception:
+            pass
+        return None
+
     def _ensure_whisper_model_ready(model_name: str) -> str:
         disable_progress_bars()
+        if whisper_model_cache_path:
+            cache_path = os.path.abspath(whisper_model_cache_path)
+            model_bin = os.path.join(cache_path, "model.bin")
+            if os.path.isfile(model_bin):
+                print(f"Whisper: используем локальный кэш (из конфига): {cache_path}", flush=True)
+                return cache_path
+
+        cached = _find_cached_whisper_snapshot(model_name)
+        if cached:
+            print(f"Whisper: используем локальный кэш: {cached}", flush=True)
+            return cached
+
         repo_id = _resolve_whisper_repo(model_name)
         token = (
             os.environ.get("HF_TOKEN")
@@ -259,20 +464,13 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
         if token:
             kwargs["token"] = token
 
-        print(f"Проверяем/скачиваем Whisper-модель: {repo_id}", flush=True)
+        print(f"Whisper: модель не в кэше, скачиваем: {repo_id}", flush=True)
         model_path = snapshot_download(**kwargs)
         model_path = os.path.abspath(model_path)
         model_bin = os.path.join(model_path, "model.bin")
-        vad_asset = _find_model_asset(model_path, "silero_vad_v6.onnx")
-        if not os.path.isfile(model_bin) or not vad_asset:
-            # If snapshot is incomplete, clear and force-download once more.
-            missing = []
-            if not os.path.isfile(model_bin):
-                missing.append("model.bin")
-            if not vad_asset:
-                missing.append("silero_vad_v6.onnx")
+        if not os.path.isfile(model_bin):
             print(
-                f"Отсутствуют файлы модели ({', '.join(missing)}), очищаем и перекачиваем: {model_path}",
+                f"Отсутствует model.bin, очищаем и перекачиваем: {model_path}",
                 flush=True,
             )
             shutil.rmtree(model_path, ignore_errors=True)
@@ -280,26 +478,90 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             retry_kwargs["force_download"] = True
             model_path = os.path.abspath(snapshot_download(**retry_kwargs))
             model_bin = os.path.join(model_path, "model.bin")
-            vad_asset = _find_model_asset(model_path, "silero_vad_v6.onnx")
-            missing_after_retry = []
             if not os.path.isfile(model_bin):
-                missing_after_retry.append("model.bin")
-            if not vad_asset:
-                missing_after_retry.append("silero_vad_v6.onnx")
-            if missing_after_retry:
                 raise RuntimeError(
-                    f"Whisper model download incomplete: missing {', '.join(missing_after_retry)} in {model_path}"
+                    f"Whisper model download incomplete: missing model.bin in {model_path}"
                 )
+        vad_asset = _find_vad_asset()
+        if vad_asset:
+            print(f"VAD asset: {vad_asset}", flush=True)
+        else:
+            print(
+                "VAD asset silero_vad_v6.onnx не найден — распознавание пойдёт без vad_filter.",
+                flush=True,
+            )
         return model_path
 
+    def _transcribe_with_mlx(source_wav: str, model_name: str) -> list[dict[str, float | str]]:
+        import mlx_whisper  # noqa: PLC0415
+
+        repo = _mlx_whisper_repo(model_name)
+        print(
+            f"Whisper: Apple Silicon MLX, repo={repo}, язык={whisper_language}",
+            flush=True,
+        )
+        t0 = time.perf_counter()
+        result = mlx_whisper.transcribe(
+            source_wav,
+            path_or_hf_repo=repo,
+            language=whisper_language,
+            word_timestamps=True,
+        )
+        elapsed = time.perf_counter() - t0
+        words: list[dict[str, float | str]] = []
+        seg_count = 0
+        for segment in result.get("segments") or []:
+            seg_count += 1
+            segment_words = segment.get("words") or []
+            if segment_words:
+                for word_info in segment_words:
+                    raw = (word_info.get("word") or word_info.get("text") or "").strip()
+                    start = word_info.get("start")
+                    end = word_info.get("end")
+                    if not raw or start is None or end is None:
+                        continue
+                    for token in tokenize_for_match(raw):
+                        words.append(
+                            {"text": token, "start": float(start), "end": float(end)}
+                        )
+            else:
+                text = (segment.get("text") or "").strip()
+                start = segment.get("start")
+                end = segment.get("end")
+                if text and start is not None and end is not None:
+                    for token in tokenize_for_match(text):
+                        words.append(
+                            {"text": token, "start": float(start), "end": float(end)}
+                        )
+        print(
+            f"Whisper MLX: готово за {elapsed:.1f} с, сегментов={seg_count}, слов={len(words)}",
+            flush=True,
+        )
+        return words
+
     def _run_whisper_once(source_wav: str, local_model_dir: str):
+        vad_available = _find_vad_asset() is not None
+        cpu_threads = min(8, os.cpu_count() or 4)
+        print(f"Whisper: модель из {local_model_dir}", flush=True)
+
         def _transcribe_with(device: str, compute_type: str):
-            model = WhisperModel(local_model_dir, device=device, compute_type=compute_type)
+            beam_size = 5 if device == "cuda" else 1
+            print(
+                f"Whisper: загрузка, device={device}, compute={compute_type}, "
+                f"vad={vad_available}, beam_size={beam_size}, cpu_threads={cpu_threads}",
+                flush=True,
+            )
+            model = WhisperModel(
+                local_model_dir,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=cpu_threads,
+            )
             transcribe_kwargs: dict[str, Any] = {
                 "language": whisper_language,
                 "word_timestamps": True,
-                "beam_size": 5,
-                "vad_filter": True,
+                "beam_size": beam_size,
+                "vad_filter": vad_available,
             }
             try:
                 segments_iter, info = model.transcribe(source_wav, **transcribe_kwargs)
@@ -314,16 +576,28 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
                     segments_iter, info = model.transcribe(source_wav, **transcribe_kwargs)
                 else:
                     raise
-            # Materialize here to catch lazy runtime failures (e.g. missing CUDA libs)
-            # inside this function so CPU fallback is guaranteed.
-            segments = list(segments_iter)
+            print("Whisper: распознавание начато...", flush=True)
+            segments: list[Any] = []
+            for idx, segment in enumerate(segments_iter, start=1):
+                segments.append(segment)
+                if idx % 100 == 0:
+                    print(f"Whisper: обработано сегментов {idx}...", flush=True)
+            print(
+                f"Whisper: распознавание завершено, сегментов={len(segments)}, "
+                f"язык={getattr(info, 'language', '?')}",
+                flush=True,
+            )
             return segments, info
 
         try:
-            return _transcribe_with("cuda", "float16")
+            import ctranslate2  # noqa: PLC0415
+
+            if ctranslate2.get_cuda_device_count() > 0:
+                return _transcribe_with("cuda", "float16")
         except Exception:
-            print("Whisper GPU-режим недоступен/упал, повтор на CPU...", flush=True)
-            return _transcribe_with("cpu", "int8")
+            pass
+        print("Whisper GPU (CUDA) недоступен, повтор на CPU int8...", flush=True)
+        return _transcribe_with("cpu", "int8")
 
     def _cleanup_broken_whisper_snapshot(err: Exception) -> bool:
         text = str(err)
@@ -400,8 +674,14 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
 
     temp_wav_path: str | None = None
     try:
-        model_local_dir = _ensure_whisper_model_ready(whisper_model)
-        # Нормализация аудио в WAV 16k mono снижает ошибки декодера ffmpeg/whisper.
+        try:
+            audio_duration_sec = get_audio_duration(audio_file)
+            print(
+                f"Whisper: длительность аудио {audio_duration_sec / 60:.1f} мин",
+                flush=True,
+            )
+        except Exception:
+            pass
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             temp_wav_path = tmp.name
         convert_cmd = [
@@ -418,6 +698,12 @@ def transcribe_words(audio_file: str, whisper_model: str, whisper_language: str)
             temp_wav_path,
         ]
         subprocess.run(convert_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+        if _is_apple_silicon():
+            ensure_apple_silicon_mlx_runtime()
+            return _transcribe_with_mlx(temp_wav_path, whisper_model)
+
+        model_local_dir = _ensure_whisper_model_ready(whisper_model)
 
         try:
             segments, _ = _run_whisper_once(temp_wav_path, model_local_dir)
@@ -719,6 +1005,71 @@ def map_sentence_bounds_anchor(sentences: list[str], whisper_words: list[dict[st
     return raw_bounds, diagnostics
 
 
+def normalize_sentence_key(text: str) -> str:
+    return " ".join(tokenize_for_match(text))
+
+
+def build_short_phrase_repeat_index(sentences: list[str]) -> dict[str, list[int]]:
+    """Индекс нормализованного текста -> индексы фраз (только короткие, повторяющиеся)."""
+    buckets: dict[str, list[int]] = {}
+    for i, sentence in enumerate(sentences):
+        tokens = tokenize_for_match(sentence)
+        if not tokens or len(tokens) > SHORT_PHRASE_TOKEN_MAX:
+            continue
+        key = " ".join(tokens)
+        buckets.setdefault(key, []).append(i)
+    return {k: v for k, v in buckets.items() if len(v) > 1}
+
+
+def compute_ahead_time_budget(
+    sentence_index: int,
+    n_sentences: int,
+    full_duration: float,
+    last_time_end: float,
+    factor: float,
+) -> float:
+    if n_sentences <= 0 or full_duration <= 0:
+        return last_time_end + MATCH_TIME_AHEAD_GAP_CAP_SEC
+    remaining_sentences = max(1, n_sentences - sentence_index)
+    remaining_audio = max(0.0, full_duration - last_time_end)
+    expected_pace = full_duration / n_sentences
+    pace_budget = expected_pace * factor
+    share_budget = remaining_audio / remaining_sentences * factor
+    return last_time_end + min(MATCH_TIME_AHEAD_GAP_CAP_SEC, max(pace_budget, share_budget))
+
+
+def _rescue_overlap_has_content_tokens(sentence_tokens: list[str], matched_sentence_positions: set[int]) -> bool:
+    if not matched_sentence_positions:
+        return False
+    content = [sentence_tokens[i] for i in matched_sentence_positions if i < len(sentence_tokens)]
+    if not content:
+        return False
+    non_stop = [t for t in content if t not in MATCH_STOPWORDS]
+    if non_stop:
+        return True
+    return len(content) >= 2
+
+
+def _rescue_tail_rejected(
+    match_start: float,
+    coverage: float,
+    sentence_index: int,
+    n_sentences: int,
+    full_duration: float,
+    is_rescue: bool,
+) -> bool:
+    if not is_rescue or full_duration <= 0 or n_sentences <= 0:
+        return False
+    remaining_fraction = (n_sentences - sentence_index) / n_sentences
+    in_tail = match_start > full_duration * RESCUE_TAIL_AUDIO_FRACTION
+    many_remaining = remaining_fraction > RESCUE_TAIL_REMAIN_SENT_FRACTION
+    if in_tail and many_remaining:
+        return True
+    if in_tail and coverage < RESCUE_TAIL_MIN_COVERAGE:
+        return True
+    return False
+
+
 def _block_forced_match_span_allowed(
     first_idx: int,
     last_idx: int,
@@ -747,6 +1098,9 @@ def _match_sentence_at_cursor(
     cursor: int,
     min_coverage: float,
     max_ahead_words: int,
+    max_time: float,
+    min_whisper_idx_exclusive: int = -1,
+    is_rescue: bool = False,
 ) -> tuple[int, int, float, int, int] | None:
     """Возвращает (first_idx, last_idx, coverage, window_start, window_end) или None."""
     tokens = tokenize_for_match(sentence)
@@ -754,24 +1108,41 @@ def _match_sentence_at_cursor(
         return None
     start_search = max(0, cursor)
     end_search = min(len(whisper_tokens), max(start_search + 1, cursor + max_ahead_words))
-    window_tokens = whisper_tokens[start_search:end_search]
-    matcher = difflib.SequenceMatcher(None, tokens, window_tokens)
-    pairs: list[tuple[int, int]] = []
-    for a_idx, b_idx, size in matcher.get_matching_blocks():
-        for j in range(size):
-            pairs.append((a_idx + j, start_search + b_idx + j))
-    if not pairs:
+    while end_search > start_search and float(whisper_words[end_search - 1]["start"]) > max_time:
+        end_search -= 1
+    if end_search <= start_search:
         return None
-    coverage = len({a for a, _ in pairs}) / max(1, len(tokens))
-    if coverage < min_coverage:
-        return None
-    first_idx = min(w for _, w in pairs)
-    last_idx = max(w for _, w in pairs)
-    if first_idx < cursor:
-        return None
-    if not _block_forced_match_span_allowed(first_idx, last_idx, len(tokens), whisper_words):
-        return None
-    return (first_idx, last_idx, coverage, start_search, end_search)
+
+    best: tuple[int, int, float, int, int] | None = None
+    for try_first in range(start_search, end_search):
+        if try_first < cursor or try_first <= min_whisper_idx_exclusive:
+            continue
+        if float(whisper_words[try_first]["start"]) > max_time:
+            break
+        window_tokens = whisper_tokens[try_first:end_search]
+        matcher = difflib.SequenceMatcher(None, tokens, window_tokens)
+        pairs: list[tuple[int, int]] = []
+        for a_idx, b_idx, size in matcher.get_matching_blocks():
+            for j in range(size):
+                pairs.append((a_idx + j, try_first + b_idx + j))
+        if not pairs:
+            continue
+        matched_sentence_positions = {a for a, _ in pairs}
+        coverage = len(matched_sentence_positions) / max(1, len(tokens))
+        if coverage < min_coverage:
+            continue
+        if is_rescue and not _rescue_overlap_has_content_tokens(tokens, matched_sentence_positions):
+            continue
+        first_idx = min(w for _, w in pairs)
+        last_idx = max(w for _, w in pairs)
+        if first_idx < cursor or first_idx < try_first:
+            continue
+        if not _block_forced_match_span_allowed(first_idx, last_idx, len(tokens), whisper_words):
+            continue
+        candidate = (first_idx, last_idx, coverage, start_search, end_search)
+        if best is None or first_idx < best[0]:
+            best = candidate
+    return best
 
 
 def map_sentence_bounds_block_forced(
@@ -789,12 +1160,15 @@ def map_sentence_bounds_block_forced(
     safe_full = max(0.0, full_duration)
 
     strict_cov = 0.45
-    rescue_cov = 0.28
-    rescue_ahead = 400
+    rescue_cov = RESCUE_COV_DEFAULT
+    rescue_ahead = RESCUE_AHEAD_WORDS
 
     w_cursor = 0
     last_time_end = 0.0
     matched_flags = [False] * n
+    tail_reject_count = 0
+    repeat_index = build_short_phrase_repeat_index(sentences)
+    last_whisper_end_by_key: dict[str, int] = {}
 
     def diag_base(s_idx: int) -> dict[str, Any]:
         bs = (s_idx // BLOCK_FORCED_SENTENCES) * BLOCK_FORCED_SENTENCES
@@ -827,25 +1201,66 @@ def map_sentence_bounds_block_forced(
 
         hit: tuple[int, int, float, int, int] | None = None
         match_kind = "strict"
+        min_whisper_exclusive = -1
+        sent_key = normalize_sentence_key(sentences[s_idx])
+        if sent_key in repeat_index:
+            min_whisper_exclusive = last_whisper_end_by_key.get(sent_key, -1)
+
+        max_time_strict = compute_ahead_time_budget(
+            s_idx, n, safe_full, last_time_end, MATCH_TIME_AHEAD_FACTOR_STRICT
+        )
+        max_time_rescue = compute_ahead_time_budget(
+            s_idx, n, safe_full, last_time_end, MATCH_TIME_AHEAD_FACTOR_RESCUE
+        )
+        token_count = len(tokens)
+        rescue_threshold = RESCUE_COV_SHORT if token_count <= SHORT_PHRASE_TOKEN_MAX else rescue_cov
+
         for ahead in LOCAL_ALIGN_WINDOW_AHEAD_STEPS:
             hit = _match_sentence_at_cursor(
-                sentences[s_idx], whisper_tokens, whisper_words, w_cursor, strict_cov, ahead
+                sentences[s_idx],
+                whisper_tokens,
+                whisper_words,
+                w_cursor,
+                strict_cov,
+                ahead,
+                max_time_strict,
+                min_whisper_exclusive,
+                is_rescue=False,
             )
             if hit is not None:
                 break
         if hit is None:
             hit = _match_sentence_at_cursor(
-                sentences[s_idx], whisper_tokens, whisper_words, w_cursor, rescue_cov, rescue_ahead
+                sentences[s_idx],
+                whisper_tokens,
+                whisper_words,
+                w_cursor,
+                rescue_threshold,
+                rescue_ahead,
+                max_time_rescue,
+                min_whisper_exclusive,
+                is_rescue=True,
             )
             match_kind = "rescue" if hit is not None else "none"
 
+        tail_rejected_this = False
+        if hit is not None:
+            first_idx, last_idx, coverage, ws, we = hit
+            match_start = float(whisper_words[first_idx]["start"])
+            if _rescue_tail_rejected(match_start, coverage, s_idx, n, safe_full, match_kind == "rescue"):
+                tail_reject_count += 1
+                tail_rejected_this = True
+                hit = None
+                match_kind = "none"
+
         if hit is None:
+            reason = "tail_rescue_rejected" if tail_rejected_this else "no_sentence_match"
             diagnostics.append(
                 {
                     **diag_base(s_idx),
                     "matched": False,
                     "coverage": 0.0,
-                    "reason": "no_sentence_match",
+                    "reason": reason,
                     "match_kind": "none",
                     "window_start": w_cursor,
                     "window_end": min(len(whisper_tokens), w_cursor + rescue_ahead),
@@ -868,12 +1283,15 @@ def map_sentence_bounds_block_forced(
         matched_flags[s_idx] = True
         w_cursor = last_idx + 1
         last_time_end = e
+        if sent_key in repeat_index:
+            last_whisper_end_by_key[sent_key] = last_idx
+        reject_reason = "rescue_low_threshold" if match_kind == "rescue" else None
         diagnostics.append(
             {
                 **diag_base(s_idx),
                 "matched": True,
                 "coverage": coverage,
-                "reason": "rescue_low_threshold" if match_kind == "rescue" else None,
+                "reason": reject_reason,
                 "match_kind": match_kind,
                 "window_start": ws,
                 "window_end": we,
@@ -1013,7 +1431,13 @@ def map_sentence_bounds_block_forced(
     for i in range(n):
         s = max(prev_end, float(raw_bounds[i]["start"]))
         e = max(s + MIN_PHRASE_SEC, float(raw_bounds[i]["end"]))
-        if e - s > MAX_PHRASE_SEC:
+        kind = diagnostics[i].get("match_kind") if i < len(diagnostics) else None
+        is_last_filled_before_anchor = (
+            kind == "filled_between"
+            and i + 1 < n
+            and matched_flags[i + 1]
+        )
+        if e - s > MAX_PHRASE_SEC and not is_last_filled_before_anchor:
             e = s + MAX_PHRASE_SEC
         if e > safe_full:
             e = safe_full
@@ -1021,6 +1445,9 @@ def map_sentence_bounds_block_forced(
             e = min(safe_full, s + MIN_PHRASE_SEC)
         raw_bounds[i] = {"start": s, "end": e}
         prev_end = e
+
+    if diagnostics:
+        diagnostics[0]["_align_meta_tail_reject_count"] = tail_reject_count
 
     return raw_bounds, diagnostics
 
@@ -1154,6 +1581,158 @@ def build_absolute_clip_intervals_from_bounds(
             e = min(fd, s + MIN_PHRASE_SEC)
         out.append((s, e))
     return out
+
+
+def detect_timing_holes(
+    raw_bounds: list[dict[str, float]], clip_count: int
+) -> list[dict[str, float | int]]:
+    """Явные дыры между end[i] и start[i+1] на шкале озвучки."""
+    holes: list[dict[str, float | int]] = []
+    n = min(clip_count, len(raw_bounds))
+    for i in range(max(0, n - 1)):
+        end_i = float(raw_bounds[i]["end"])
+        start_next = float(raw_bounds[i + 1]["start"])
+        if start_next > end_i + 1e-3:
+            holes.append(
+                {
+                    "after_clip_index": i,
+                    "before_clip_index": i + 1,
+                    "hole_start": end_i,
+                    "hole_end": start_next,
+                    "hole_duration_sec": start_next - end_i,
+                }
+            )
+    return holes
+
+
+def _spread_single_hole_extra(
+    hole_dur: float,
+    indices: list[int],
+    phrase_durs: list[float],
+) -> list[float]:
+    if hole_dur <= 0 or not indices:
+        return []
+    weights = [max(1e-6, phrase_durs[i]) for i in indices]
+    wsum = sum(weights)
+    return [hole_dur * (w / wsum) for w in weights]
+
+
+def spread_holes_into_display_durations(
+    phrase_durs: list[float],
+    holes: list[dict[str, float | int]],
+    clip_count: int,
+    align_diagnostics: list[dict[str, Any]],
+    max_clip_sec: float = MAX_CLIP_DISPLAY_SEC,
+) -> list[float]:
+    extra = [0.0] * clip_count
+    for hole in holes:
+        i = int(hole["after_clip_index"])
+        if i < 0 or i >= clip_count:
+            continue
+        spread_start = 0
+        for k in range(i, -1, -1):
+            if k < len(align_diagnostics) and align_diagnostics[k].get("matched"):
+                spread_start = k
+                break
+        indices = list(range(spread_start, i + 1))
+        if not indices:
+            indices = [i]
+        shares = _spread_single_hole_extra(float(hole["hole_duration_sec"]), indices, phrase_durs)
+        for idx, share in zip(indices, shares):
+            extra[idx] += share
+
+    display = [phrase_durs[i] + extra[i] for i in range(clip_count)]
+    for _ in range(clip_count * 2):
+        overflow = 0.0
+        for i in range(clip_count):
+            if display[i] > max_clip_sec:
+                overflow += display[i] - max_clip_sec
+                display[i] = max_clip_sec
+        if overflow <= 1e-6:
+            break
+        receivers = [i for i in range(clip_count) if display[i] < max_clip_sec - 1e-6]
+        if not receivers:
+            break
+        per = overflow / len(receivers)
+        for i in receivers:
+            display[i] = min(max_clip_sec, display[i] + per)
+    return display
+
+
+def build_display_clip_intervals_from_bounds(
+    raw_bounds: list[dict[str, float]],
+    clip_count: int,
+    full_duration: float,
+    holes: list[dict[str, float | int]],
+    align_diagnostics: list[dict[str, Any]],
+) -> tuple[list[tuple[float, float]], list[float]]:
+    """
+    Mode A: длительность клипа = фраза (end-start) + доля размазанных дыр; позиция = start[i].
+    """
+    n = max(0, clip_count)
+    fd = max(0.0, float(full_duration))
+    phrase_durs: list[float] = []
+    for i in range(n):
+        s = float(raw_bounds[i]["start"])
+        e = float(raw_bounds[i]["end"])
+        if e > s:
+            d = max(MIN_PHRASE_SEC, min(MAX_PHRASE_SEC, e - s))
+        else:
+            d = MIN_PHRASE_SEC
+        phrase_durs.append(d)
+
+    display_durs = spread_holes_into_display_durations(
+        phrase_durs, holes, n, align_diagnostics, MAX_CLIP_DISPLAY_SEC
+    )
+    intervals: list[tuple[float, float]] = []
+    for i in range(n):
+        s = min(fd, float(raw_bounds[i]["start"]))
+        e = min(fd, s + display_durs[i])
+        if e <= s:
+            e = min(fd, s + MIN_PHRASE_SEC)
+        intervals.append((s, e))
+    return intervals, display_durs
+
+
+def predict_zero_clip_ratio(intervals: list[tuple[float, float]], eps: float = 1e-3) -> float:
+    if not intervals:
+        return 0.0
+    zero = sum(1 for a, b in intervals if (b - a) <= eps)
+    return zero / len(intervals)
+
+
+def compute_clip_quality_metrics(
+    intervals: list[tuple[float, float]],
+    align_diagnostics: list[dict[str, Any]],
+    sentence_count: int,
+) -> dict[str, Any]:
+    matched = sum(1 for d in align_diagnostics if d.get("matched"))
+    rescued = sum(1 for d in align_diagnostics if d.get("match_kind") == "rescue")
+    tail_reject = sum(1 for d in align_diagnostics if d.get("reason") == "tail_rescue_rejected")
+    if align_diagnostics and "_align_meta_tail_reject_count" in align_diagnostics[0]:
+        tail_reject = int(align_diagnostics[0].get("_align_meta_tail_reject_count", tail_reject))
+    durs = [max(0.0, b - a) for a, b in intervals]
+    max_dur = max(durs) if durs else 0.0
+    zero_ratio = predict_zero_clip_ratio(intervals)
+    matched_ratio = matched / sentence_count if sentence_count else 0.0
+    rescued_ratio = rescued / sentence_count if sentence_count else 0.0
+    quality_score = max(
+        0.0,
+        min(
+            1.0,
+            matched_ratio * 0.7
+            + (1.0 - zero_ratio) * 0.2
+            + (1.0 - min(1.0, max_dur / max(MAX_CLIP_DISPLAY_SEC, 1e-6))) * 0.1,
+        ),
+    )
+    return {
+        "matched_ratio": matched_ratio,
+        "rescued_ratio": rescued_ratio,
+        "tail_reject_count": tail_reject,
+        "max_clip_duration_sec": max_dur,
+        "zero_clip_ratio": zero_ratio,
+        "quality_score": quality_score,
+    }
 
 
 def extend_sequential_intervals_for_extra_assets(
@@ -1293,6 +1872,7 @@ def enforce_bounds_invariants(
 def enforce_bounds_invariants_soft(
     raw_bounds: list[dict[str, float]],
     full_duration: float,
+    align_diagnostics: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, float]], list[dict[str, float | int | str]]]:
     """
     Мягкая нормализация для block_forced: монотонность и [0, full], без схлопывания хвоста в нули.
@@ -1305,9 +1885,19 @@ def enforce_bounds_invariants_soft(
     prev_end = 0.0
     for i, b in enumerate(raw_bounds):
         old_s, old_e = float(b["start"]), float(b["end"])
+        kind = align_diagnostics[i].get("match_kind") if align_diagnostics and i < len(align_diagnostics) else None
+        next_matched = (
+            align_diagnostics[i + 1].get("matched")
+            if align_diagnostics and i + 1 < len(align_diagnostics)
+            else False
+        )
+        is_last_filled_before_anchor = kind == "filled_between" and next_matched
         s = max(prev_end, old_s, 0.0)
         e = max(s + MIN_PHRASE_SEC, old_e)
-        if e - s > MAX_PHRASE_SEC:
+        if is_last_filled_before_anchor and align_diagnostics and i + 1 < len(raw_bounds):
+            anchor_start = float(raw_bounds[i + 1]["start"])
+            e = max(e, min(anchor_start, safe_full))
+        if e - s > MAX_PHRASE_SEC and not is_last_filled_before_anchor:
             e = s + MAX_PHRASE_SEC
         if e > safe_full:
             e = safe_full
@@ -1700,7 +2290,13 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
             )
 
     print(f"[2/6] Whisper: {config.whisper_model} ({config.whisper_language})...", flush=True)
-    whisper_words = transcribe_words(config.audio_file, config.whisper_model, config.whisper_language)
+    log_whisper_runtime_plan()
+    whisper_words = transcribe_words(
+        config.audio_file,
+        config.whisper_model,
+        config.whisper_language,
+        config.whisper_model_cache_path,
+    )
     if not whisper_words:
         raise RuntimeError("Whisper не вернул слов с таймкодами.")
     print(f"Распознано слов: {len(whisper_words)}", flush=True)
@@ -1719,7 +2315,9 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
     # т.к. он может добавлять дрейф по всей последовательности.
     if config.align_mode == "block_forced":
         gap_anomalies = []
-        raw_bounds, invariant_fixes = enforce_bounds_invariants_soft(raw_bounds, full_duration)
+        raw_bounds, invariant_fixes = enforce_bounds_invariants_soft(
+            raw_bounds, full_duration, align_diagnostics
+        )
     else:
         raw_bounds, gap_anomalies = clamp_large_inter_phrase_gaps(
             raw_bounds=raw_bounds,
@@ -1747,6 +2345,47 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
 
     gaps_for_summary = [r["gap_to_next_sec"] for r in detailed_rows if r.get("gap_to_next_sec") is not None]
     max_gap = max(gaps_for_summary) if gaps_for_summary else None
+    clip_sentence_count = min(len(assets), len(sentences))
+    if config.align_mode == "block_forced":
+        timing_holes = detect_timing_holes(raw_bounds, clip_sentence_count)
+        with open(os.path.join(temp_dir, "timing_holes.json"), "w", encoding="utf-8") as f:
+            json.dump(timing_holes, f, ensure_ascii=False, indent=2)
+        intervals, _display_durs = build_display_clip_intervals_from_bounds(
+            raw_bounds,
+            clip_sentence_count,
+            full_duration,
+            timing_holes,
+            align_diagnostics,
+        )
+        intervals = extend_sequential_intervals_for_extra_assets(
+            intervals,
+            len(assets),
+            full_duration,
+            config.extend_tail,
+            config.tail_start_percent,
+        )
+        interval_sanitize_meta: dict[str, Any] = {
+            "zero_or_negative_before": 0,
+            "scaled": False,
+            "clip_count": len(intervals),
+            "sequential_from_bounds": False,
+            "absolute_audio_timeline": True,
+            "display_mode_a": True,
+            "hole_count": len(timing_holes),
+        }
+        clip_quality = compute_clip_quality_metrics(intervals, align_diagnostics, len(sentences))
+    else:
+        transition_points = build_transition_points(raw_bounds, full_duration)
+        intervals = build_intervals_for_assets(
+            transition_points=transition_points,
+            assets_count=len(assets),
+            full_duration=full_duration,
+            extend_tail=config.extend_tail,
+            tail_start_percent=config.tail_start_percent,
+        )
+        intervals, interval_sanitize_meta = sanitize_clip_intervals(intervals, full_duration)
+        clip_quality = {}
+
     summary: dict[str, Any] = {
         "align_mode": config.align_mode,
         "sentence_count": len(sentences),
@@ -1761,6 +2400,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         "filled_trailing": sum(1 for d in align_diagnostics if d.get("match_kind") == "filled_trailing"),
         "filled_uniform_no_anchor": sum(1 for d in align_diagnostics if d.get("match_kind") == "filled_uniform"),
         "max_gap_to_next_sec": max_gap,
+        **clip_quality,
     }
     with open(os.path.join(temp_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -1786,7 +2426,23 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         )
     if max_gap is not None:
         print(f"Диагностика: max_gap_to_next_sec={max_gap:.3f} (см. _temp/summary.json).", flush=True)
-    clip_sentence_count = min(len(assets), len(sentences))
+    if clip_quality.get("tail_reject_count"):
+        print(
+            f"Tail-guard: отклонено ложных rescue-матчей в хвосте: {clip_quality['tail_reject_count']}.",
+            flush=True,
+        )
+    if clip_quality.get("zero_clip_ratio", 0) > ZERO_CLIP_WARN_RATIO:
+        print(
+            f"ПРЕДУПРЕЖДЕНИЕ: {clip_quality['zero_clip_ratio'] * 100:.1f}% клипов с нулевой длительностью "
+            f"(порог {ZERO_CLIP_WARN_RATIO * 100:.0f}%). Проверьте alignment и исходники.",
+            flush=True,
+        )
+    if clip_quality.get("max_clip_duration_sec", 0) > MAX_CLIP_DISPLAY_SEC:
+        print(
+            f"ПРЕДУПРЕЖДЕНИЕ: максимальная длительность клипа {clip_quality['max_clip_duration_sec']:.1f} с "
+            f"(потолок {MAX_CLIP_DISPLAY_SEC:.1f} с).",
+            flush=True,
+        )
     if (
         config.align_mode == "block_forced"
         and len(sentences) > clip_sentence_count
@@ -1799,34 +2455,6 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
             f"Последний клип: ~{last_s:.1f}—{full_duration:.1f} с (длительность ~{last_dur:.1f} с, одна картинка на хвост фраз).",
             flush=True,
         )
-    if config.align_mode == "block_forced":
-        intervals = build_absolute_clip_intervals_from_bounds(
-            raw_bounds, clip_sentence_count, full_duration
-        )
-        intervals = extend_sequential_intervals_for_extra_assets(
-            intervals,
-            len(assets),
-            full_duration,
-            config.extend_tail,
-            config.tail_start_percent,
-        )
-        interval_sanitize_meta: dict[str, Any] = {
-            "zero_or_negative_before": 0,
-            "scaled": False,
-            "clip_count": len(intervals),
-            "sequential_from_bounds": False,
-            "absolute_audio_timeline": True,
-        }
-    else:
-        transition_points = build_transition_points(raw_bounds, full_duration)
-        intervals = build_intervals_for_assets(
-            transition_points=transition_points,
-            assets_count=len(assets),
-            full_duration=full_duration,
-            extend_tail=config.extend_tail,
-            tail_start_percent=config.tail_start_percent,
-        )
-        intervals, interval_sanitize_meta = sanitize_clip_intervals(intervals, full_duration)
     with open(os.path.join(temp_dir, "interval_sanitize.json"), "w", encoding="utf-8") as f:
         json.dump(interval_sanitize_meta, f, ensure_ascii=False, indent=2)
     if interval_sanitize_meta.get("zero_or_negative_before", 0):
@@ -1990,5 +2618,6 @@ def run_pipeline_from_json(config_path: str) -> dict[str, Any]:
         xml_parts=int(raw.get("xml_parts", 3)),
         processing_mode=raw.get("processing_mode", "render"),
         align_mode=raw.get("align_mode", "block_forced"),
+        whisper_model_cache_path=raw.get("whisper_model_cache_path"),
     )
     return run_pipeline(config)

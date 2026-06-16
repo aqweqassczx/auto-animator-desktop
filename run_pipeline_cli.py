@@ -2,10 +2,38 @@ import argparse
 import json
 import os
 import shutil
+import sys
 import traceback
 from pathlib import Path
 
-from pipeline_core import run_pipeline_from_json
+from pipeline_core import ensure_apple_silicon_mlx_runtime, log_whisper_runtime_plan, run_pipeline_from_json
+
+
+def _configure_stdio_utf8() -> None:
+    """GUI/piped stdout on Windows often defaults to cp1251 — force UTF-8 for logs/JSON."""
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+def _safe_print(text: str) -> None:
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout.buffer.write(text.encode("utf-8", errors="replace") + b"\n")
+            sys.stdout.buffer.flush()
+        else:
+            print(text.encode("ascii", errors="replace").decode("ascii"), flush=True)
+
+
+def _print_json_line(payload: dict) -> None:
+    _safe_print(json.dumps(payload, ensure_ascii=False))
 
 
 def _classify_error(exc: Exception) -> tuple[str, int, str]:
@@ -17,6 +45,13 @@ def _classify_error(exc: Exception) -> tuple[str, int, str]:
             "WHISPER_MODEL_CACHE",
             21,
             "Поврежден или недокачан кэш Whisper-модели. Перезапусти задачу для повторной загрузки модели.",
+        )
+
+    if "mlx-whisper" in low or "mlx_whisper" in low:
+        return (
+            "MLX_WHISPER_MISSING",
+            25,
+            "На Mac Apple Silicon нужен mlx-whisper для GPU. Перезапусти задачу — установка должна пройти автоматически.",
         )
 
     if "no such file or directory" in low and ("ffmpeg" in low or "ffprobe" in low):
@@ -99,14 +134,23 @@ def _prepare_hf_auth() -> None:
         os.environ["HF_TOKEN"] = token
         os.environ["HUGGINGFACE_HUB_TOKEN"] = token
         os.environ["HUGGING_FACE_HUB_TOKEN"] = token
-        print("HF token detected: using authenticated model download.", flush=True)
+        print(
+            "HF token найден (используется только если модель нужно скачать).",
+            flush=True,
+        )
     else:
-        print("HF token not found: using anonymous model download.", flush=True)
+        print(
+            "HF token не задан (скачивание моделей — анонимно, если понадобится).",
+            flush=True,
+        )
 
 
 def main() -> int:
+    _configure_stdio_utf8()
     _prepare_media_tool_env()
     _prepare_hf_auth()
+    ensure_apple_silicon_mlx_runtime()
+    log_whisper_runtime_plan()
     # Use stable HTTP download path in bundled app.
     # Xet acceleration is optional and often unavailable in end-user setups.
     os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
@@ -132,7 +176,7 @@ def main() -> int:
         result = run_pipeline_from_json(args.config)
         payload = {"ok": True, "result": result}
         _write_result(payload)
-        print(json.dumps(payload, ensure_ascii=False))
+        _print_json_line(payload)
         return 0
     except Exception as exc:  # pylint: disable=broad-except
         error_code, exit_code, hint = _classify_error(exc)
@@ -145,7 +189,7 @@ def main() -> int:
             "exit_code": exit_code,
         }
         _write_result(payload)
-        print(json.dumps(payload, ensure_ascii=False))
+        _print_json_line(payload)
         return exit_code
 
 
