@@ -594,16 +594,24 @@ fn resolve_bundled_mac_python(app: &AppHandle) -> Option<PathBuf> {
         return None;
     }
     let resource_dir = app.path_resolver().resource_dir()?;
-    let candidate = resource_dir
-        .join("runtime")
-        .join("mac-venv")
-        .join("bin")
-        .join("python3");
-    if candidate.is_file() {
-        Some(candidate)
-    } else {
-        None
+    let candidates = [
+        resource_dir
+            .join("runtime")
+            .join("python")
+            .join("bin")
+            .join("python3"),
+        resource_dir
+            .join("runtime")
+            .join("mac-venv")
+            .join("bin")
+            .join("python3"),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
     }
+    None
 }
 
 fn resolve_pipeline_python(app: &AppHandle, request_python: &str) -> String {

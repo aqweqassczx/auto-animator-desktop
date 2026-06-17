@@ -172,9 +172,9 @@ jobs:
             MAC_NAME="$(basename "${MAC_TAR}")"
             MAC_NAME_ENC="$(url_encode "${MAC_NAME}")"
             MAC_SIG="$(tr -d '\r\n' < "${MAC_TAR}.sig")"
-            PLATFORM_KEY="darwin-x86_64"
+            PLATFORM_KEY="darwin-aarch64"
             case "${MAC_NAME}" in
-              *aarch64*|*arm64*) PLATFORM_KEY="darwin-aarch64" ;;
+              *x86_64*) PLATFORM_KEY="darwin-x86_64" ;;
             esac
             PLATFORMS="$(jq --arg key "${PLATFORM_KEY}" --arg url "${BASE_URL}/${MAC_NAME_ENC}" --arg sig "${MAC_SIG}" '. + {($key):{"url":$url,"signature":$sig}}' <<< "${PLATFORMS}")"
           done < <(find release-assets/macos -type f -name '*.app.tar.gz' | sort)
