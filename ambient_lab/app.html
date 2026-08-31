@@ -1,0 +1,661 @@
+<title>coldroom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ground: #0A0D13;
+    --panel: #10141D;
+    --panel-2: #141926;
+    --line: #1C2230;
+    --ink: #E6EBF2;
+    --muted: #8792A4;
+    --faint: #4A5468;
+    --accent: #8FC1E3;
+    --accent-dim: #3A5A73;
+    --ok: #7BC49A;
+    --serif: "Cormorant Garamond", Georgia, serif;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+    min-height: 100vh;
+  }
+  #snow { position: fixed; inset: 0; pointer-events: none; opacity: .5; }
+  .wrap { position: relative; max-width: 1060px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  h1 {
+    font-family: var(--serif); font-style: italic; font-weight: 500;
+    font-size: 44px; margin: 0; letter-spacing: .01em; color: var(--ink);
+  }
+  h1 .dot { color: var(--accent); }
+  .tagline { color: var(--muted); font-size: 13px; }
+
+  .transport {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 0 18px;
+  }
+  button {
+    font-family: var(--sans); font-size: 13px; cursor: pointer;
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px;
+  }
+  button:hover { border-color: var(--accent-dim); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.play {
+    font-size: 15px; padding: 12px 26px; font-weight: 600;
+    background: var(--accent); color: #0A0D13; border-color: var(--accent);
+  }
+  button.play:hover { filter: brightness(1.08); }
+  select, input[type=text] {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; font-family: var(--sans); font-size: 13px;
+  }
+  .time { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); margin: 0 0 12px;
+  }
+
+  .timeline { display: flex; gap: 4px; height: 64px; margin-bottom: 10px; }
+  .seg { position: relative; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+  .seg .fill { position: absolute; inset: 0; background: var(--accent); opacity: .12; transform-origin: left; }
+  .seg.active { border-color: var(--accent-dim); }
+  .seg .lbl {
+    position: absolute; left: 6px; bottom: 4px; font-family: var(--mono);
+    font-size: 10px; color: var(--muted);
+  }
+  .seg .bars { position: absolute; right: 6px; top: 4px; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .chords-line { font-family: var(--mono); font-size: 13px; color: var(--accent); margin: 8px 0 2px; }
+  .now { color: var(--muted); font-size: 12px; min-height: 18px; }
+
+  .knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+  .knob label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .knob label b { color: var(--ink); font-weight: 500; font-family: var(--mono); font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); background: transparent; }
+
+  .layers { display: flex; flex-direction: column; gap: 8px; }
+  .layer { display: grid; grid-template-columns: 84px 1fr 40px; gap: 10px; align-items: center; }
+  .layer .name { color: var(--muted); font-size: 12px; }
+  .layer .val { font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: right; }
+
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  textarea {
+    width: 100%; height: 220px; margin-top: 10px; resize: vertical;
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px; font-family: var(--mono); font-size: 12px;
+  }
+  .row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .hint { color: var(--faint); font-size: 12px; }
+  .status { color: var(--ok); font-size: 12px; min-height: 16px; }
+  footer { margin-top: 26px; color: var(--faint); font-size: 12px; max-width: 68ch; }
+  footer p { margin: 4px 0; }
+  a { color: var(--accent); }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap">
+
+<canvas id="snow"></canvas>
+<div class="wrap">
+  <header>
+    <h1>coldroom<span class="dot">.</span></h1>
+    <span class="tagline">генеративный инструмент dark ambient — без AI-аудио, каждый звук синтезируется здесь</span>
+  </header>
+
+  <div class="transport">
+    <button class="play" id="btnPlay">▶ играть</button>
+    <select id="preset" title="Пресет трека"></select>
+    <button id="btnReroll" title="Пересобрать паттерны арпа и клавиш из нот аккордов">⟳ реролл паттернов</button>
+    <span class="time" id="clock">0:00 / 0:00</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Структура трека</h2>
+      <div class="timeline" id="timeline"></div>
+      <div class="chords-line" id="chordsLine"></div>
+      <div class="now" id="nowPlaying"></div>
+    </div>
+
+    <div class="card">
+      <h2>Макро</h2>
+      <div class="knobs">
+        <div class="knob"><label>темп <b id="vBpm"></b></label>
+          <input type="range" id="kBpm" min="60" max="90" step="1"></div>
+        <div class="knob"><label>яркость пэда <b id="vBright"></b></label>
+          <input type="range" id="kBright" min="50" max="180" step="5" value="100"></div>
+        <div class="knob"><label>реверб <b id="vRev"></b></label>
+          <input type="range" id="kRev" min="0" max="200" step="5" value="100"></div>
+        <div class="knob"><label>seed <b id="vSeed"></b></label>
+          <input type="range" id="kSeed" min="1" max="99" step="1" value="7"></div>
+      </div>
+      <h2 style="margin-top:18px">Слои</h2>
+      <div class="layers" id="layers"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>спека трека (JSON)</summary>
+    <textarea id="specBox" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="btnApply">применить спеку</button>
+      <button id="btnCopy">скопировать</button>
+      <span class="status" id="specStatus"></span>
+    </div>
+    <p class="hint">Тот же формат, что у Python-движка (ambient_lab/SPEC.md). Спеку можно отдать
+      в engine.py для рендера в MP3/WAV и экспорта MIDI в FL Studio.</p>
+  </details>
+
+  <footer>
+    <p>Каждая нота и каждый звук считаются из спеки детерминированно: пилы с расстройкой в пэде,
+       синусовый арп в пинг-понг дилее, саб-бас с глайдом, плёночный шум и свёрточный реверб.
+       Человек решает — инструмент исполняет.</p>
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+/* ---------- пресеты (тот же формат, что ambient_lab/SPEC.md) ---------- */
+const PRESETS = {
+  "cold static · Cm": {
+    title: "cold static", seed: 7, bpm: 70, beats_per_chord: 8,
+    chords: [
+      { name: "Cm9",    pad: [48,55,58,63,67,74], bass: 36, arp: [72,74,75,79,82] },
+      { name: "Abmaj7", pad: [44,51,56,60,67,72], bass: 32, arp: [72,75,79,80] },
+      { name: "Ebmaj9", pad: [51,58,62,67,70,77], bass: 39, arp: [74,75,79,82] },
+      { name: "Gm7",    pad: [43,50,55,58,65,70], bass: 31, arp: [74,77,79,82] }
+    ],
+    sections: [
+      { bars: 8, layers: { pad:1, bass:.7, hiss:.7, wind:.7 }, pad_cutoff: 900,  arp_pattern: "A" },
+      { bars: 8, layers: { pad:1, bass:1, arp:1, hiss:.7, wind:.4 }, pad_cutoff: 1300, arp_pattern: "B" },
+      { bars: 8, layers: { pad:1, bass:1, arp:1, piano:.9, lead:.7, hiss:.8, crackle:.7 }, pad_cutoff: 1700, arp_pattern: "C" },
+      { bars: 8, layers: { pad:1, bass:.9, arp:.8, piano:.7, hiss:.7, crackle:.5, wind:.5 }, pad_cutoff: 1400, arp_pattern: "B" },
+      { bars: 6, layers: { pad:.85, bass:.5, hiss:.6, wind:.7 }, pad_cutoff: 800, arp_pattern: "A" }
+    ]
+  },
+  "first snow · Gm": {
+    title: "first snow", seed: 21, bpm: 84, beats_per_chord: 8,
+    chords: [
+      { name: "Gm7",    pad: [43,50,55,58,65,70], bass: 31, arp: [74,77,79,82] },
+      { name: "Dm7",    pad: [50,57,60,65,69,76], bass: 38, arp: [74,77,81,84] },
+      { name: "Fmaj7",  pad: [53,60,64,69,72,76], bass: 41, arp: [72,76,77,81] },
+      { name: "Bbmaj7", pad: [46,53,57,62,65,69], bass: 34, arp: [74,77,81,82] }
+    ],
+    sections: [
+      { bars: 8, layers: { pad:1, hiss:.6, wind:.8 }, pad_cutoff: 850, arp_pattern: "A" },
+      { bars: 8, layers: { pad:1, bass:.9, arp:1, hiss:.7 }, pad_cutoff: 1250, arp_pattern: "B" },
+      { bars: 8, layers: { pad:1, bass:1, arp:1, piano:.9, hiss:.8, crackle:.6 }, pad_cutoff: 1650, arp_pattern: "C" },
+      { bars: 8, layers: { pad:1, bass:.9, arp:.9, lead:.6, piano:.6, hiss:.7 }, pad_cutoff: 1450, arp_pattern: "B" },
+      { bars: 6, layers: { pad:.8, hiss:.6, wind:.8 }, pad_cutoff: 750, arp_pattern: "A" }
+    ]
+  },
+  "empty hall · C#m": {
+    title: "empty hall", seed: 44, bpm: 63, beats_per_chord: 8,
+    chords: [
+      { name: "C#m9",  pad: [49,56,59,64,68,75], bass: 37, arp: [73,75,76,80] },
+      { name: "Amaj7", pad: [45,52,57,61,68,76], bass: 33, arp: [73,76,80,81] },
+      { name: "Emaj7", pad: [52,59,63,68,71,75], bass: 40, arp: [75,76,80,83] },
+      { name: "F#m7",  pad: [42,49,54,57,64,73], bass: 30, arp: [73,76,78,81] }
+    ],
+    sections: [
+      { bars: 8, layers: { pad:1, wind:1, hiss:.5 }, pad_cutoff: 750, arp_pattern: "A" },
+      { bars: 8, layers: { pad:1, bass:.8, arp:.8, wind:.7, hiss:.6 }, pad_cutoff: 1050, arp_pattern: "B" },
+      { bars: 8, layers: { pad:1, bass:1, arp:.9, lead:.8, wind:.5, hiss:.7, crackle:.5 }, pad_cutoff: 1400, arp_pattern: "C" },
+      { bars: 8, layers: { pad:.9, bass:.7, arp:.6, wind:.8, hiss:.6 }, pad_cutoff: 950, arp_pattern: "A" },
+      { bars: 6, layers: { pad:.75, wind:1, hiss:.5 }, pad_cutoff: 700, arp_pattern: "A" }
+    ]
+  }
+};
+
+const ARP_PATTERNS = {
+  A: [[0,0,.8],[4,1,.6]],
+  B: [[0,0,.9],[1.5,1,.7],[3,2,.8],[4,3,1],[5.5,2,.6],[7,1,.7]],
+  C: [[.5,1,.8],[2,2,.7],[3.5,3,1],[4.5,-1,.9],[6,2,.6],[7.5,0,.7]]
+};
+const DEFAULT_PIANO = [[0,2,.55],[3,1,.4],[5.5,3,.45]];
+const MIX = { pad:.30, bass:.34, arp:.22, piano:.26, lead:.09, hiss:.05, crackle:.05, wind:.09 };
+const LAYER_NAMES = { pad:"пэд", bass:"бас", arp:"арп", piano:"клавиши", lead:"лид", hiss:"плёнка", crackle:"крэкл", wind:"ветер" };
+
+/* ---------- состояние ---------- */
+let spec = JSON.parse(JSON.stringify(Object.values(PRESETS)[0]));
+let ctx = null, playing = false, startTime = 0, totalSec = 0;
+let schedTimer = null, sources = [], master = null, layerGains = {}, revGain = null;
+let padFilterMul = 1, rerollPatterns = null;
+
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const mulberry32 = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+
+function timing() {
+  const beat = 60 / spec.bpm, bar = 4 * beat, bpc = spec.beats_per_chord || 8;
+  const totalBars = spec.sections.reduce((a, s) => a + s.bars, 0);
+  return { beat, bar, bpc, totalBars, totalBeats: totalBars * 4, len: totalBars * 4 * beat + 9 };
+}
+function sectionAt(beatPos) {
+  let b = 0;
+  for (const s of spec.sections) { if (beatPos < b + s.bars * 4) return s; b += s.bars * 4; }
+  return spec.sections[spec.sections.length - 1];
+}
+
+/* ---------- аудио-движок ---------- */
+function makeNoiseBuffer(seconds, rng) {
+  const n = Math.floor(seconds * ctx.sampleRate);
+  const buf = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) d[i] = rng() * 2 - 1; }
+  return buf;
+}
+function makeIR(seconds, rng) {
+  const n = Math.floor(seconds * ctx.sampleRate);
+  const buf = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let lp = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / ctx.sampleRate;
+      const w = (rng() * 2 - 1) * Math.exp(-6.907 * t / seconds);
+      lp += 0.25 * (w - lp);            // темнеющий хвост
+      d[i] = lp * 2.2;
+    }
+  }
+  return buf;
+}
+function reg(src) { sources.push(src); return src; }
+
+function schedulePadChord(notes, t0, dur, cutoff, rng) {
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(1 / notes.length, t0 + 2.6);
+  g.gain.setValueAtTime(1 / notes.length, t0 + dur);
+  g.gain.linearRampToValueAtTime(0, t0 + dur + 4.5);
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass"; f.frequency.value = Math.min(cutoff * padFilterMul, 8000); f.Q.value = 0.4;
+  g.connect(f); f.connect(layerGains.pad);
+  notes.forEach((m, idx) => {
+    [-9, -4.5, 0, 4.5, 9].forEach(cents => {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth"; o.frequency.value = mtof(m); o.detune.value = cents + (rng() - .5) * 3;
+      const og = ctx.createGain(); og.gain.value = 0.2;
+      o.connect(og); og.connect(g);
+      reg(o).start(t0); o.stop(t0 + dur + 5);
+    });
+    if (idx === 0) {
+      const s = ctx.createOscillator(); s.type = "sine"; s.frequency.value = mtof(m) / 2;
+      const sg = ctx.createGain(); sg.gain.value = 0.35;
+      s.connect(sg); sg.connect(g); reg(s).start(t0); s.stop(t0 + dur + 5);
+    }
+  });
+}
+function scheduleBass(midi, prevMidi, t0, dur) {
+  const o = ctx.createOscillator(); o.type = "sawtooth";
+  o.frequency.setValueAtTime(mtof(prevMidi), t0);
+  o.frequency.linearRampToValueAtTime(mtof(midi), t0 + 0.1);
+  const s = ctx.createOscillator(); s.type = "sine";
+  s.frequency.setValueAtTime(mtof(prevMidi), t0);
+  s.frequency.linearRampToValueAtTime(mtof(midi), t0 + 0.1);
+  const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 120; f.Q.value = 0.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.9, t0 + 0.4);
+  g.gain.setValueAtTime(0.9, t0 + dur);
+  g.gain.linearRampToValueAtTime(0, t0 + dur + 0.7);
+  const og = ctx.createGain(); og.gain.value = 0.5; const sg = ctx.createGain(); sg.gain.value = 0.6;
+  o.connect(og); og.connect(f); s.connect(sg); sg.connect(f); f.connect(g); g.connect(layerGains.bass);
+  reg(o).start(t0); reg(s).start(t0); o.stop(t0 + dur + 1); s.stop(t0 + dur + 1);
+}
+function schedulePluck(midi, vel, t0, dest, decay, partials) {
+  partials.forEach(([mult, amp, tau]) => {
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = mtof(midi) * mult;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(amp * vel, t0 + 0.012);
+    g.gain.setTargetAtTime(0, t0 + 0.012, tau);
+    o.connect(g); g.connect(dest);
+    reg(o).start(t0); o.stop(t0 + decay);
+  });
+}
+function scheduleLead(midi, t0, dur) {
+  const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = mtof(midi);
+  const vib = ctx.createOscillator(); vib.frequency.value = 4.3;
+  const vibG = ctx.createGain(); vibG.gain.value = 8;
+  vib.connect(vibG); vibG.connect(o.detune);
+  const drift = ctx.createOscillator(); drift.frequency.value = 0.13;
+  const driftG = ctx.createGain(); driftG.gain.value = 6;
+  drift.connect(driftG); driftG.connect(o.detune);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.5, t0 + 1.2);
+  g.gain.setValueAtTime(0.5, t0 + dur);
+  g.gain.linearRampToValueAtTime(0, t0 + dur + 2.2);
+  o.connect(g); g.connect(layerGains.lead);
+  [o, vib, drift].forEach(x => { reg(x).start(t0); x.stop(t0 + dur + 2.5); });
+}
+
+function buildGraph(rng) {
+  master = ctx.createGain(); master.gain.value = 0.9;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14; comp.ratio.value = 3; comp.attack.value = 0.1; comp.release.value = 0.4;
+  master.connect(comp); comp.connect(ctx.destination);
+
+  const conv = ctx.createConvolver(); conv.buffer = makeIR(8.5, rng);
+  const convLP = ctx.createBiquadFilter(); convLP.type = "lowpass"; convLP.frequency.value = 5200;
+  revGain = ctx.createGain(); revGain.gain.value = 1.15 * (+kRev.value / 100);
+  conv.connect(convLP); convLP.connect(revGain); revGain.connect(master);
+
+  layerGains = {};
+  for (const name of Object.keys(MIX)) {
+    const g = ctx.createGain(); g.gain.value = 0; g.connect(master); layerGains[name] = g;
+    const wet = { pad:.5, arp:1, piano:.8, lead:1 }[name];
+    if (wet) { const s = ctx.createGain(); s.gain.value = wet; g.connect(s); s.connect(conv); }
+  }
+
+  // пинг-понг дилей арпа
+  const { beat } = timing();
+  const dIn = ctx.createGain();
+  const dL = ctx.createDelay(3), dR = ctx.createDelay(3);
+  dL.delayTime.value = dR.delayTime.value = 0.75 * beat;
+  const fbL = ctx.createGain(), fbR = ctx.createGain();
+  fbL.gain.value = fbR.gain.value = 0.5;
+  const lpL = ctx.createBiquadFilter(), lpR = ctx.createBiquadFilter();
+  lpL.type = lpR.type = "lowpass"; lpL.frequency.value = lpR.frequency.value = 6000;
+  const panL = ctx.createStereoPanner(), panR = ctx.createStereoPanner();
+  panL.pan.value = -0.55; panR.pan.value = 0.55;
+  dIn.connect(dL); dL.connect(lpL); lpL.connect(panL); panL.connect(layerGains.arp);
+  lpL.connect(fbL); fbL.connect(dR); dR.connect(lpR); lpR.connect(panR); panR.connect(layerGains.arp);
+  lpR.connect(fbR); fbR.connect(dL);
+  layerGains.arpDelayIn = dIn; dIn.connect(layerGains.arp);
+  return { conv };
+}
+
+function scheduleTextures(rng, t0, len) {
+  const mk = (filterSetup, gainNode, lfoHz, lfoDepth, base) => {
+    const src = ctx.createBufferSource(); src.buffer = makeNoiseBuffer(6, rng); src.loop = true;
+    const g = ctx.createGain(); g.gain.value = base;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = lfoHz;
+    const lg = ctx.createGain(); lg.gain.value = lfoDepth;
+    lfo.connect(lg); lg.connect(g.gain);
+    let node = src;
+    for (const f of filterSetup) { node.connect(f); node = f; }
+    node.connect(g); g.connect(gainNode);
+    reg(src).start(t0); src.stop(t0 + len);
+    reg(lfo).start(t0); lfo.stop(t0 + len);
+  };
+  const hp = fr => { const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = fr; return f; };
+  const lp = fr => { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = fr; return f; };
+  mk([hp(2500), lp(10000)], layerGains.hiss, 0.1, 0.3, 0.65);
+  mk([lp(420), lp(420)], layerGains.wind, 0.07, 0.35, 0.8);
+  // крэкл: редкие щелчки, короткий зацикленный буфер (экономия памяти на телефоне)
+  const crackleSec = 13;
+  const n = Math.floor(crackleSec * ctx.sampleRate);
+  const cb = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let k = 0; k < crackleSec * 2; k++) {
+    const pos = Math.floor(rng() * (n - 200)), ch = rng() < .5 ? 0 : 1, amp = .2 + rng() * .8;
+    const d = cb.getChannelData(ch);
+    for (let i = 0; i < 120; i++) d[pos + i] += amp * Math.exp(-i / 25);
+  }
+  const cs = ctx.createBufferSource(); cs.buffer = cb; cs.loop = true;
+  const clp = lp(6000); cs.connect(clp); clp.connect(layerGains.crackle);
+  reg(cs).start(t0); cs.stop(t0 + len);
+}
+
+function scheduleAll() {
+  const rng = mulberry32(+spec.seed || 1);
+  const { beat, bpc, totalBeats, len } = timing();
+  totalSec = len;
+  const t0 = ctx.currentTime + 0.15;
+  buildGraph(rng);
+  scheduleTextures(rng, t0, len);
+
+  // громкости слоёв по секциям (плавные скаты 1с)
+  let secStartBeat = 0;
+  for (const name of Object.keys(MIX)) {
+    const g = layerGains[name].gain;
+    let b = 0, prev = (spec.sections[0].layers[name] || 0) * MIX[name];
+    g.setValueAtTime(prev, t0);
+    for (const s of spec.sections) {
+      const v = (s.layers[name] || 0) * MIX[name];
+      const at = t0 + b * 4 * beat;
+      if (b > 0) { g.setValueAtTime(prev, Math.max(t0, at - 0.5)); g.linearRampToValueAtTime(v, at + 0.5); }
+      else g.setValueAtTime(v, at);
+      prev = v; b += s.bars;
+    }
+    g.setValueAtTime(prev, t0 + totalBeats * beat);
+    g.linearRampToValueAtTime(0, t0 + len - 0.2);
+  }
+
+  // аккорды
+  let prevBass = spec.chords[spec.chords.length - 1].bass;
+  const chordDur = bpc * beat;
+  for (let b = 0, i = 0; b < totalBeats; b += bpc, i++) {
+    const chord = spec.chords[i % spec.chords.length];
+    const sec = sectionAt(b);
+    const tC = t0 + b * beat;
+    schedulePadChord(chord.pad, tC, chordDur, sec.pad_cutoff || 1200, rng);
+    scheduleBass(chord.bass, prevBass, tC, chordDur); prevBass = chord.bass;
+
+    let pattern = sec.arp_pattern;
+    if (typeof pattern === "string") pattern = (rerollPatterns && rerollPatterns[pattern]) || ARP_PATTERNS[pattern] || ARP_PATTERNS.B;
+    for (const [bp, idx, vel] of pattern) {
+      const notes = chord.arp;
+      const note = notes[idx >= 0 && idx < notes.length ? idx : notes.length - 1];
+      schedulePluck(note, vel * (0.92 + rng() * .16), tC + bp * beat + (rng() - .5) * .03,
+                    layerGains.arpDelayIn, 3, [[1, .5, .55], [2, .04, .3]]);
+    }
+    const pp = (rerollPatterns && rerollPatterns.piano) || spec.piano_pattern || DEFAULT_PIANO;
+    const pnotes = chord.piano || chord.pad.slice(2, 6);
+    for (const [bp, idx, vel] of pp) {
+      schedulePluck(pnotes[idx % pnotes.length], vel * .8, tC + bp * beat + (rng() - .5) * .04,
+                    layerGains.piano, 4, [[1, .6, .9], [2, .2, .45], [3, .07, .25]]);
+    }
+    scheduleLead(chord.pad[chord.pad.length - 1], tC, chordDur);
+  }
+  startTime = t0;
+}
+
+/* ---------- транспорт ---------- */
+function stopAll() {
+  playing = false;
+  btnPlay.textContent = "▶ играть";
+  if (schedTimer) cancelAnimationFrame(schedTimer);
+  for (const s of sources) { try { s.stop(0); } catch (e) {} }
+  sources = [];
+  if (master) { try { master.disconnect(); } catch (e) {} master = null; }
+  nowPlaying.textContent = "";
+}
+function fmt(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function tick() {
+  if (!playing) return;
+  const el = ctx.currentTime - startTime;
+  clock.textContent = fmt(el) + " / " + fmt(totalSec);
+  const { beat, bpc } = timing();
+  const beatPos = el / beat;
+  let b = 0;
+  document.querySelectorAll(".seg").forEach((segEl, i) => {
+    const s = spec.sections[i], segBeats = s.bars * 4;
+    const frac = Math.min(1, Math.max(0, (beatPos - b) / segBeats));
+    segEl.querySelector(".fill").style.transform = "scaleX(" + frac + ")";
+    segEl.classList.toggle("active", frac > 0 && frac < 1);
+    b += segBeats;
+  });
+  if (beatPos >= 0) {
+    const ci = Math.floor(beatPos / bpc) % spec.chords.length;
+    const chord = spec.chords[ci];
+    if (chord && el < totalSec - 8) nowPlaying.textContent = "звучит: " + chord.name;
+  }
+  if (el > totalSec) { stopAll(); renderTimeline(); return; }
+  schedTimer = requestAnimationFrame(tick);
+}
+async function play() {
+  if (playing) { stopAll(); return; }
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  stopAll();
+  playing = true;
+  btnPlay.textContent = "■ стоп";
+  scheduleAll();
+  tick();
+}
+
+/* ---------- генерация паттернов (реролл) ---------- */
+function generatePatterns(seed) {
+  const rng = mulberry32(seed * 977 + 13);
+  const gen = density => {
+    const events = []; let idx = Math.floor(rng() * 2);
+    const slots = [0, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5];
+    for (const s of slots) {
+      if (rng() < density) {
+        events.push([s, idx, .55 + rng() * .45]);
+        idx += rng() < .65 ? 1 : -1;
+        if (idx < 0) idx = 1;
+        if (idx > 3) idx = rng() < .5 ? 3 : 0;
+      }
+    }
+    return events.length ? events : [[0, 0, .8]];
+  };
+  return { A: gen(.14), B: gen(.4), C: gen(.45),
+           piano: [[Math.floor(rng() * 2), 2, .5 + rng() * .2],
+                   [2.5 + Math.floor(rng() * 3), 1, .35 + rng() * .2],
+                   [5 + Math.floor(rng() * 2) * .5, 3, .4 + rng() * .2]] };
+}
+
+/* ---------- UI ---------- */
+function renderTimeline() {
+  const { totalBars } = timing();
+  timeline.innerHTML = "";
+  spec.sections.forEach((s, i) => {
+    const seg = document.createElement("div");
+    seg.className = "seg";
+    seg.style.flex = String(s.bars);
+    const active = Object.entries(s.layers).filter(([, v]) => v > 0).map(([k]) => LAYER_NAMES[k] || k);
+    seg.title = active.join(", ") || "тишина";
+    seg.innerHTML = '<div class="fill" style="transform:scaleX(0)"></div>' +
+      '<span class="bars">' + s.bars + 'т</span><span class="lbl">' + (i + 1) + "</span>";
+    timeline.appendChild(seg);
+  });
+  chordsLine.textContent = spec.chords.map(c => c.name).join(" — ") + "  ·  " + spec.bpm + " BPM";
+  clock.textContent = "0:00 / " + fmt(timing().len);
+}
+function renderLayers() {
+  layersBoxRender();
+  function layersBoxRender() {
+    const box = document.getElementById("layers");
+    box.innerHTML = "";
+    for (const name of Object.keys(MIX)) {
+      const row = document.createElement("div"); row.className = "layer";
+      const val = Math.round(MIX[name] * 100);
+      row.innerHTML = '<span class="name">' + LAYER_NAMES[name] + '</span>' +
+        '<input type="range" min="0" max="60" step="1" value="' + val + '" data-layer="' + name + '">' +
+        '<span class="val">' + val + '</span>';
+      box.appendChild(row);
+    }
+    box.querySelectorAll("input").forEach(inp => {
+      inp.addEventListener("input", () => {
+        const name = inp.dataset.layer;
+        MIX[name] = +inp.value / 100;
+        inp.nextElementSibling.textContent = inp.value;
+        if (playing && layerGains[name]) {
+          const sec = sectionAt((ctx.currentTime - startTime) / timing().beat);
+          layerGains[name].gain.setTargetAtTime((sec.layers[name] || 0) * MIX[name], ctx.currentTime, .1);
+        }
+      });
+    });
+  }
+}
+function syncSpecBox() { specBox.value = JSON.stringify(spec, null, 1); }
+function applySpecChange() {
+  renderTimeline(); syncSpecBox();
+  kBpm.value = spec.bpm; vBpm.textContent = spec.bpm + " BPM";
+  kSeed.value = spec.seed; vSeed.textContent = spec.seed;
+  if (playing) { stopAll(); play(); }
+}
+
+const $ = id => document.getElementById(id);
+const btnPlay = $("btnPlay"), timeline = $("timeline"), chordsLine = $("chordsLine"),
+      nowPlaying = $("nowPlaying"), clock = $("clock"), specBox = $("specBox"),
+      kBpm = $("kBpm"), kBright = $("kBright"), kRev = $("kRev"), kSeed = $("kSeed"),
+      vBpm = $("vBpm"), vBright = $("vBright"), vRev = $("vRev"), vSeed = $("vSeed");
+
+const presetSel = $("preset");
+Object.keys(PRESETS).forEach(k => {
+  const o = document.createElement("option"); o.value = k; o.textContent = k; presetSel.appendChild(o);
+});
+presetSel.addEventListener("change", () => {
+  spec = JSON.parse(JSON.stringify(PRESETS[presetSel.value]));
+  rerollPatterns = null;
+  applySpecChange();
+});
+
+btnPlay.addEventListener("click", play);
+$("btnReroll").addEventListener("click", () => {
+  spec.seed = 1 + Math.floor(Math.random() * 98);
+  kSeed.value = spec.seed; vSeed.textContent = spec.seed;
+  rerollPatterns = generatePatterns(spec.seed);
+  syncSpecBox();
+  if (playing) { stopAll(); play(); }
+});
+kBpm.addEventListener("input", () => { spec.bpm = +kBpm.value; vBpm.textContent = spec.bpm + " BPM"; renderTimeline(); syncSpecBox(); });
+kBpm.addEventListener("change", () => { if (playing) { stopAll(); play(); } });
+kBright.addEventListener("input", () => { padFilterMul = +kBright.value / 100; vBright.textContent = kBright.value + "%"; });
+kBright.addEventListener("change", () => { if (playing) { stopAll(); play(); } });
+kRev.addEventListener("input", () => {
+  vRev.textContent = kRev.value + "%";
+  if (revGain) revGain.gain.setTargetAtTime(1.15 * (+kRev.value / 100), ctx.currentTime, .2);
+});
+kSeed.addEventListener("input", () => { spec.seed = +kSeed.value; vSeed.textContent = kSeed.value; syncSpecBox(); });
+kSeed.addEventListener("change", () => { if (playing) { stopAll(); play(); } });
+
+$("btnApply").addEventListener("click", () => {
+  try {
+    const s = JSON.parse(specBox.value);
+    if (!s.chords || !s.chords.length || !s.sections || !s.sections.length) throw new Error("нужны chords и sections");
+    spec = s; rerollPatterns = null;
+    specStatus.textContent = "применено";
+    setTimeout(() => specStatus.textContent = "", 2000);
+    applySpecChange();
+  } catch (e) { specStatus.textContent = "ошибка: " + e.message; }
+});
+const specStatus = $("specStatus");
+$("btnCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(specBox.value); specStatus.textContent = "скопировано"; }
+  catch (e) { specBox.select(); specStatus.textContent = "выдели и скопируй вручную"; }
+  setTimeout(() => specStatus.textContent = "", 2000);
+});
+
+vBpm.textContent = spec.bpm + " BPM"; vBright.textContent = "100%"; vRev.textContent = "100%"; vSeed.textContent = spec.seed;
+kBpm.value = spec.bpm;
+renderTimeline(); renderLayers(); syncSpecBox();
+
+/* ---------- снег ---------- */
+(() => {
+  const cv = $("snow"), c2 = cv.getContext("2d");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  let W, H, flakes;
+  const resize = () => {
+    W = cv.width = innerWidth; H = cv.height = innerHeight;
+    flakes = Array.from({ length: Math.min(90, W / 14) }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      r: .6 + Math.random() * 1.6, v: .12 + Math.random() * .35, drift: Math.random() * 2 * Math.PI
+    }));
+  };
+  resize(); addEventListener("resize", resize);
+  (function frame() {
+    c2.clearRect(0, 0, W, H);
+    c2.fillStyle = "rgba(143,193,227,.55)";
+    for (const f of flakes) {
+      f.y += f.v; f.drift += .004; f.x += Math.sin(f.drift) * .15;
+      if (f.y > H + 4) { f.y = -4; f.x = Math.random() * W; }
+      c2.beginPath(); c2.arc(f.x, f.y, f.r, 0, 7); c2.fill();
+    }
+    requestAnimationFrame(frame);
+  })();
+})();
+</script>

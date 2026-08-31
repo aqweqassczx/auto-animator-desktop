@@ -9,3 +9,4 @@
 !pipeline_core.py
 !ambient_lab/
 !ambient_lab/**
+ambient_lab/out/

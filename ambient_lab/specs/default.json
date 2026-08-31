@@ -1,0 +1,21 @@
+{
+  "title": "cold static",
+  "seed": 7,
+  "bpm": 70,
+  "beats_per_chord": 8,
+  "chords": [
+    { "name": "Cm9",    "pad": [48, 55, 58, 63, 67, 74], "bass": 36, "arp": [72, 74, 75, 79, 82] },
+    { "name": "Abmaj7", "pad": [44, 51, 56, 60, 67, 72], "bass": 32, "arp": [72, 75, 79, 80] },
+    { "name": "Ebmaj9", "pad": [51, 58, 62, 67, 70, 77], "bass": 39, "arp": [74, 75, 79, 82] },
+    { "name": "Gm7",    "pad": [43, 50, 55, 58, 65, 70], "bass": 31, "arp": [74, 77, 79, 82] }
+  ],
+  "sections": [
+    { "bars": 8, "layers": { "pad": 1, "bass": 0.7, "hiss": 0.7, "wind": 0.7 }, "pad_cutoff": 900, "arp_pattern": "A" },
+    { "bars": 8, "layers": { "pad": 1, "bass": 1, "arp": 1, "hiss": 0.7, "wind": 0.4 }, "pad_cutoff": 1300, "arp_pattern": "B" },
+    { "bars": 8, "layers": { "pad": 1, "bass": 1, "arp": 1, "piano": 0.9, "lead": 0.7, "hiss": 0.8, "crackle": 0.7 }, "pad_cutoff": 1700, "arp_pattern": "C" },
+    { "bars": 8, "layers": { "pad": 1, "bass": 0.9, "arp": 0.8, "piano": 0.7, "hiss": 0.7, "crackle": 0.5, "wind": 0.5 }, "pad_cutoff": 1400, "arp_pattern": "B" },
+    { "bars": 6, "layers": { "pad": 0.85, "bass": 0.5, "hiss": 0.6, "wind": 0.7 }, "pad_cutoff": 800, "arp_pattern": "A" }
+  ],
+  "fx": { "reverb_sec": 9.0, "predelay": 0.04, "delay_beats": 0.75, "delay_fb": 0.5 },
+  "master": { "target_rms_db": -16.0, "peak_db": -1.2, "fade_in": 4.0, "fade_out": 12.0 }
+}
