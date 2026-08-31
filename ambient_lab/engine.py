@@ -10,7 +10,7 @@ import sys
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import butter, sosfilt, fftconvolve, sawtooth
+from scipy.signal import butter, sosfilt, fftconvolve
 
 SR = 44100
 
@@ -32,44 +32,107 @@ DEFAULT_SPEC = {
     "fx": {"reverb_sec": 9.0, "predelay": 0.04, "delay_beats": 0.75,
            "delay_fb": 0.5, "pad_wet": 0.45, "arp_wet": 0.9,
            "piano_wet": 0.7, "lead_wet": 0.9},
-    "mix": {"pad": 0.34, "bass": 0.40, "arp": 0.26, "piano": 0.30,
-            "lead": 0.10, "hiss": 0.035, "crackle": 0.05, "wind": 0.10},
-    "master": {"target_rms_db": -16.0, "peak_db": -1.2,
+    "mix": {"pad": 0.34, "bass": 0.40, "arp": 0.17, "piano": 0.40,
+            "lead": 0.18, "hiss": 0.035, "crackle": 0.05, "wind": 0.10},
+    "master": {"target_rms_db": -18.5, "peak_db": -1.2,
                "fade_in": 4.0, "fade_out": 10.0},
 }
 
 LAYERS = ["pad", "bass", "arp", "piano", "lead", "hiss", "crackle", "wind"]
 
 
+def _fail(msg):
+    sys.exit(f"spec error: {msg}")
+
+
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def load_spec(path):
-    with open(path, encoding="utf-8") as fh:
-        user = json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            user = json.load(fh)
+    except json.JSONDecodeError as e:
+        _fail(f"битый JSON — {e}")
+    except OSError as e:
+        _fail(f"не читается файл — {e}")
+
     spec = copy.deepcopy(DEFAULT_SPEC)
     for key, val in user.items():
         if isinstance(val, dict) and isinstance(spec.get(key), dict):
             spec[key].update(val)
         else:
             spec[key] = val
-    if not spec.get("chords"):
-        sys.exit("spec error: нужен непустой список chords")
-    if not spec.get("sections"):
-        sys.exit("spec error: нужен непустой список sections")
+
+    if not isinstance(spec.get("chords"), list) or not spec["chords"]:
+        _fail("нужен непустой список chords")
+    if not isinstance(spec.get("sections"), list) or not spec["sections"]:
+        _fail("нужен непустой список sections")
+    if not _num(spec["bpm"]) or not 40 <= spec["bpm"] <= 140:
+        _fail("bpm должен быть числом в 40..140")
+    if not _num(spec["beats_per_chord"]) or not 1 <= spec["beats_per_chord"] <= 32:
+        _fail("beats_per_chord должен быть числом в 1..32")
+    if spec["lead_mode"] not in ("top", "ninth"):
+        _fail("lead_mode: только 'top' или 'ninth'")
+
     for ch in spec["chords"]:
-        for field in ("pad", "bass", "arp"):
-            if field not in ch:
-                sys.exit(f"spec error: у аккорда {ch.get('name', '?')} нет поля {field}")
-        notes = list(ch["pad"]) + list(ch["arp"]) + [ch["bass"]]
-        if not all(isinstance(n, (int, float)) and 20 <= n <= 100 for n in notes):
-            sys.exit(f"spec error: MIDI-ноты вне диапазона 20..100 в {ch.get('name', '?')}")
+        name = ch.get("name", "?")
+        for field in ("pad", "arp"):
+            if not isinstance(ch.get(field), list):
+                _fail(f"{field} аккорда {name} должен быть списком нот")
+        if not _num(ch.get("bass")):
+            _fail(f"bass аккорда {name} должен быть MIDI-числом")
+        if not 3 <= len(ch["pad"]) <= 8:
+            _fail(f"pad аккорда {name}: нужно 3-8 нот (лучше 4-6)")
+        if not 2 <= len(ch["arp"]) <= 8:
+            _fail(f"arp аккорда {name}: нужно 2-8 нот")
+        if "piano" in ch and (not isinstance(ch["piano"], list) or not ch["piano"]):
+            _fail(f"piano аккорда {name}: непустой список нот или убери поле")
         ch.setdefault("piano", list(ch["pad"])[2:6])
-    for sec in spec["sections"]:
-        if "bars" not in sec or sec["bars"] < 1:
-            sys.exit("spec error: у секции нет bars >= 1")
+        notes = list(ch["pad"]) + list(ch["arp"]) + [ch["bass"]] + list(ch["piano"])
+        if not all(_num(n) and 20 <= n <= 100 for n in notes):
+            _fail(f"MIDI-ноты вне диапазона 20..100 в {name}")
+
+    def check_pattern(p, where):
+        if isinstance(p, str):
+            if p not in ARP_PATTERNS:
+                _fail(f"неизвестный arp_pattern '{p}' в {where} (есть A/B/C или свой список)")
+            return
+        if not isinstance(p, list) or not p:
+            _fail(f"arp_pattern в {where}: строка A/B/C или непустой список [доля, индекс, велосити]")
+        for ev in p:
+            if (not isinstance(ev, list) or len(ev) != 3
+                    or not all(_num(x) for x in ev) or not 0 <= ev[2] <= 1.5):
+                _fail(f"событие паттерна {ev} в {where}: нужно [доля, индекс, велосити 0..1.5]")
+
+    for i, sec in enumerate(spec["sections"], 1):
+        where = f"секции {i}"
+        if not _num(sec.get("bars")) or sec["bars"] < 1:
+            _fail(f"bars в {where} должен быть числом >= 1")
         sec.setdefault("layers", {})
+        if not isinstance(sec["layers"], dict):
+            _fail(f"layers в {where} должен быть объектом")
+        unknown = set(sec["layers"]) - set(LAYERS)
+        if unknown:
+            _fail(f"неизвестные слои {sorted(unknown)} в {where} (есть: {', '.join(LAYERS)})")
+        for k, v in sec["layers"].items():
+            if not _num(v) or not 0 <= v <= 1.5:
+                _fail(f"громкость слоя {k} в {where}: число 0..1.5")
         sec.setdefault("pad_cutoff", 1200)
+        if not _num(sec["pad_cutoff"]) or not 200 <= sec["pad_cutoff"] <= 8000:
+            _fail(f"pad_cutoff в {where}: число 200..8000")
         sec.setdefault("arp_pattern", "B")
-    if not 40 <= spec["bpm"] <= 140:
-        sys.exit("spec error: bpm вне 40..140")
+        check_pattern(sec["arp_pattern"], where)
+    check_pattern(spec["piano_pattern"], "piano_pattern")
+
+    for k in ("reverb_sec", "predelay", "delay_beats", "delay_fb"):
+        if not _num(spec["fx"].get(k)):
+            _fail(f"fx.{k} должен быть числом")
+    if not 2 <= spec["fx"]["reverb_sec"] <= 16:
+        _fail("fx.reverb_sec: 2..16 секунд")
+    if not 0 <= spec["fx"]["delay_fb"] <= 0.85:
+        _fail("fx.delay_fb: 0..0.85")
     return spec
 
 
@@ -96,6 +159,37 @@ def env_asr(n, attack, release, level=1.0):
     if r > 0:
         e[n - r:] = e[n - r] * 0.5 * (1 + np.cos(np.linspace(0, np.pi, r)))
     return e
+
+
+def end_fade(sig, ms=25.0):
+    """Короткий скат в ноль в конце ноты — против ступеньки при обрезке хвоста."""
+    k = min(int(ms / 1000 * SR), len(sig))
+    if k > 0:
+        sig[-k:] *= 0.5 * (1 + np.cos(np.linspace(0, np.pi, k)))
+    return sig
+
+
+_SAW_TABLES = {}
+
+
+def bl_saw(f, n, phase01):
+    """Бэндлимитед-пила через вейвтейбл (без алиасинга наивной пилы)."""
+    K = max(1, min(int(0.45 * SR / f), 1024))
+    table = _SAW_TABLES.get(K)
+    if table is None:
+        size = 4096
+        spec = np.zeros(size // 2 + 1, dtype=complex)
+        k = np.arange(1, min(K, size // 2 - 1) + 1)
+        spec[1:len(k) + 1] = 1j / k
+        table = np.fft.irfft(spec)
+        table /= np.abs(table).max()
+        _SAW_TABLES[K] = table
+    size = len(table)
+    idx = (phase01 + f * np.arange(n) / SR) % 1.0 * size
+    i0 = idx.astype(np.int64)
+    frac = idx - i0
+    i1 = (i0 + 1) % size
+    return table[i0] * (1 - frac) + table[i1] * frac
 
 
 class Renderer:
@@ -163,15 +257,16 @@ class Renderer:
         detunes = [-9, -4.5, 0, 4.5, 9]
         for idx, m in enumerate(notes):
             f0 = midi_to_freq(m)
+            # общая фаза суб-октавы на оба канала: низ остаётся моно-совместимым
+            sub_phase = self.rng.uniform(0, 2 * np.pi)
             for ch in range(2):
                 sig = np.zeros(n)
                 for cents in detunes:
                     f = f0 * 2 ** (cents / 1200)
-                    sig += sawtooth(2 * np.pi * f * t + self.rng.uniform(0, 2 * np.pi))
+                    sig += bl_saw(f, n, self.rng.uniform(0, 1))
                 sig /= len(detunes)
-                if idx == 0:  # тело — суб-октава только у нижней ноты
-                    sig += 0.35 * np.sin(2 * np.pi * (f0 / 2) * t
-                                         + self.rng.uniform(0, 2 * np.pi))
+                if idx == 0:
+                    sig += 0.35 * np.sin(2 * np.pi * (f0 / 2) * t + sub_phase)
                 out[:, ch] += sig
         out /= len(notes)
         out = lowpass(out, cutoff, order=2)
@@ -186,20 +281,29 @@ class Renderer:
         freq = np.full(n, f_target)
         freq[:glide] = np.linspace(f_prev, f_target, glide)
         phase = 2 * np.pi * np.cumsum(freq) / SR
-        sig = 0.55 * sawtooth(phase) + 0.6 * np.sin(phase)
+        sig = 0.55 * (2 * ((phase / (2 * np.pi)) % 1.0) - 1.0) + 0.6 * np.sin(phase)
         sig = lowpass(sig, 120, order=4)
-        sig *= env_asr(n, 0.4, 0.8)
+        # релиз заканчивается внутри слота: корни аккордов не звучат вдвоём
+        dur_n = min(int(dur * SR), n)
+        env = np.zeros(n)
+        env[:dur_n] = env_asr(dur_n, 0.4, 0.6)
+        sig *= env
         return np.column_stack([sig, sig])
 
     def arp_note(self, midi, vel):
         n = int(3.0 * SR)
         t = np.arange(n) / SR
         f = midi_to_freq(midi)
-        sig = np.sin(2 * np.pi * f * t) + 0.08 * np.sin(4 * np.pi * f * t)
-        env = np.exp(-t / 1.1)
+        # верхние гармоники с быстрым затуханием: дилей становится слышен над пэдом
+        sig = np.zeros(n)
+        for mult, amp, tau in [(1, 1.0, 1.1), (2, 0.22, 0.55),
+                               (3, 0.10, 0.35), (4, 0.05, 0.25)]:
+            if f * mult < SR * 0.45:
+                sig += amp * np.sin(2 * np.pi * f * mult * t) * np.exp(-t / tau)
         a = int(0.015 * SR)
-        env[:a] *= np.linspace(0, 1, a)
-        sig *= env * vel
+        sig[:a] *= np.linspace(0, 1, a)
+        end_fade(sig)
+        sig *= vel
         return np.column_stack([sig, sig]) * 0.5
 
     def piano_note(self, midi, vel, pan):
@@ -208,10 +312,12 @@ class Renderer:
         f = midi_to_freq(midi)
         sig = np.zeros(n)
         for k, (amp, tau) in enumerate([(1.0, 1.8), (0.35, 0.9), (0.12, 0.5)], start=1):
-            sig += amp * np.sin(2 * np.pi * f * k * t) * np.exp(-t / tau)
+            if f * k < SR * 0.45:
+                sig += amp * np.sin(2 * np.pi * f * k * t) * np.exp(-t / tau)
         a = int(0.004 * SR)
         sig[:a] *= np.linspace(0, 1, a)
         sig = lowpass(sig, 3500)
+        end_fade(sig)
         sig *= vel * 0.6
         return np.column_stack([sig * (1 - pan), sig * pan]) * 1.4
 
@@ -232,17 +338,19 @@ class Renderer:
     def ping_pong(self, x, delay_sec, feedback, taps=10):
         n = len(x)
         out = x.copy()
-        d = int(delay_sec * SR)
+        d = max(1, int(delay_sec * SR))
         tap = x.copy()
+        first_right = bool(self.rng.integers(0, 2))  # сторона первого эха — не всегда правая
         for k in range(1, taps + 1):
             tap = lowpass(tap, 6500) * feedback
             if k * d >= n:
                 break
             shifted = np.zeros_like(x)
             shifted[k * d:] = tap[: n - k * d]
-            pan = 0.75 if k % 2 else 0.25
-            out[:, 0] += shifted[:, 0] * (1 - pan) * 2
-            out[:, 1] += shifted[:, 1] * pan * 2
+            right = (k % 2 == 1) == first_right
+            pan = 0.75 if right else 0.25
+            out[:, 0] += shifted[:, 0] * (1 - pan)
+            out[:, 1] += shifted[:, 1] * pan
         return out
 
     def make_ir(self):
@@ -259,6 +367,12 @@ class Renderer:
             noise = self.rng.standard_normal((n, 2))
             decay = np.exp(-6.907 * t / band_t60)[:, None]
             ir += band_filter(noise) * decay
+        # Каналам — одинаковая АЧХ (своя только фаза): без стерео-лотереи
+        # на длинных синусах арпа/лида; затухание сохраняется в фазах
+        H = np.fft.rfft(ir, axis=0)
+        mag = np.sqrt((np.abs(H) ** 2).mean(axis=1, keepdims=True))
+        H = mag * np.exp(1j * np.angle(H))
+        ir = np.fft.irfft(H, n=n, axis=0)
         pre = np.zeros((int(self.spec["fx"]["predelay"] * SR), 2))
         ir = np.vstack([pre, ir])
         ir /= np.sqrt((ir ** 2).sum(axis=0, keepdims=True))
@@ -284,9 +398,10 @@ class Renderer:
 
             pattern = sec["arp_pattern"]
             if isinstance(pattern, str):
-                pattern = ARP_PATTERNS.get(pattern, ARP_PATTERNS["B"])
+                pattern = ARP_PATTERNS[pattern]
             for beat_pos, idx, vel in pattern:
                 notes = chord["arp"]
+                idx = int(idx)
                 note = notes[idx] if -len(notes) <= idx < len(notes) else notes[-1]
                 jitter = self.rng.uniform(-0.015, 0.015)
                 v = vel * self.rng.uniform(0.92, 1.08)
@@ -295,8 +410,11 @@ class Renderer:
 
             for beat_pos, idx, vel in spec["piano_pattern"]:
                 notes = chord["piano"]
-                note = notes[idx % len(notes)]
-                pan = 0.35 + 0.3 * (idx % len(notes)) / max(len(notes) - 1, 1)
+                i = int(idx) % len(notes)
+                note = notes[i]
+                # пан симметрично вокруг центра, без систематического крена вправо
+                spread = (i / max(len(notes) - 1, 1) - 0.5) * 0.3
+                pan = 0.5 + spread
                 jitter = self.rng.uniform(-0.02, 0.02)
                 self.place(raw["piano"], t0 + beat_pos * self.beat + jitter,
                            self.piano_note(note, vel, pan))
@@ -317,10 +435,11 @@ class Renderer:
             crackle[pos:pos + 120, self.rng.integers(0, 2)] += click
         raw["crackle"] = lowpass(crackle, 6000)
 
+        # Ветер: срез ниже 70 Гц — это текстура, а не второй саб-бас
         wind = np.cumsum(self.rng.standard_normal((self.n_total, 2)), axis=0)
-        wind = lowpass(highpass(wind, 20), 500)
+        wind = lowpass(highpass(wind, 70), 500)
         wind /= np.abs(wind).max() + 1e-9
-        wind *= (0.6 + 0.4 * np.sin(2 * np.pi * 0.07 * t + 0.7))[:, None] * 3.0
+        wind *= (0.6 + 0.4 * np.sin(2 * np.pi * 0.07 * t + 0.7))[:, None] * 1.6
         raw["wind"] = wind
 
         # Дилей арпа
@@ -339,7 +458,7 @@ class Renderer:
         wet = np.column_stack([
             fftconvolve(send[:, 0], ir[:, 0])[: self.n_total],
             fftconvolve(send[:, 1], ir[:, 1])[: self.n_total],
-        ]) * 3.0
+        ]) * 2.2
 
         mix = wet
         for name in LAYERS:
@@ -349,15 +468,24 @@ class Renderer:
         mix *= (1.0 + 0.13 * np.sin(2 * np.pi * 0.06 * t - 1.2))[:, None]
         mix = highpass(mix, 24)
 
+        # Баланс каналов: выравниваем RMS L/R до лимитера
+        ch_rms = np.sqrt((mix ** 2).mean(axis=0))
+        if ch_rms.min() > 1e-9:
+            target = float(np.sqrt(ch_rms[0] * ch_rms[1]))
+            mix[:, 0] *= target / ch_rms[0]
+            mix[:, 1] *= target / ch_rms[1]
+
         rms = np.sqrt((mix ** 2).mean())
         mix *= 10 ** (spec["master"]["target_rms_db"] / 20) / (rms + 1e-12)
         peak_lin = 10 ** (spec["master"]["peak_db"] / 20)
         mix = np.tanh(mix / peak_lin) * peak_lin
 
-        fi = int(spec["master"]["fade_in"] * SR)
-        mix[:fi] *= (0.5 * (1 - np.cos(np.linspace(0, np.pi, fi))))[:, None]
-        fo = int(spec["master"]["fade_out"] * SR)
-        mix[-fo:] *= (0.5 * (1 + np.cos(np.linspace(0, np.pi, fo))))[:, None]
+        fi = min(int(spec["master"]["fade_in"] * SR), len(mix))
+        if fi > 0:
+            mix[:fi] *= (0.5 * (1 - np.cos(np.linspace(0, np.pi, fi))))[:, None]
+        fo = min(int(spec["master"]["fade_out"] * SR), len(mix))
+        if fo > 0:
+            mix[-fo:] *= (0.5 * (1 + np.cos(np.linspace(0, np.pi, fo))))[:, None]
 
         assert np.isfinite(mix).all(), "NaN в миксе"
         return mix.astype(np.float32)
@@ -404,14 +532,15 @@ class Renderer:
             if layers.get("arp", 0) > 0:
                 pattern = sec["arp_pattern"]
                 if isinstance(pattern, str):
-                    pattern = ARP_PATTERNS.get(pattern, ARP_PATTERNS["B"])
+                    pattern = ARP_PATTERNS[pattern]
                 for beat_pos, idx, vel in pattern:
                     notes = chord["arp"]
+                    idx = int(idx)
                     note = notes[idx] if -len(notes) <= idx < len(notes) else notes[-1]
                     arp_ev.append((start_beat + beat_pos, 1.0, note, vel))
             if layers.get("piano", 0) > 0:
                 for beat_pos, idx, vel in self.spec["piano_pattern"]:
-                    note = chord["piano"][idx % len(chord["piano"])]
+                    note = chord["piano"][int(idx) % len(chord["piano"])]
                     piano_ev.append((start_beat + beat_pos, 2.0, note, vel))
             if layers.get("lead", 0) > 0:
                 lead_midi = (chord["pad"][-1] if self.spec["lead_mode"] == "top"
