@@ -1,0 +1,140 @@
+{
+ "title": "empty hall",
+ "seed": 44,
+ "bpm": 63,
+ "beats_per_chord": 8,
+ "chords": [
+  {
+   "name": "C#m9",
+   "pad": [
+    49,
+    56,
+    59,
+    64,
+    68,
+    75
+   ],
+   "bass": 37,
+   "arp": [
+    73,
+    75,
+    76,
+    80
+   ]
+  },
+  {
+   "name": "Amaj7",
+   "pad": [
+    45,
+    52,
+    57,
+    61,
+    68,
+    76
+   ],
+   "bass": 33,
+   "arp": [
+    73,
+    76,
+    80,
+    81
+   ]
+  },
+  {
+   "name": "Emaj7",
+   "pad": [
+    52,
+    59,
+    63,
+    68,
+    71,
+    75
+   ],
+   "bass": 40,
+   "arp": [
+    75,
+    76,
+    80,
+    83
+   ]
+  },
+  {
+   "name": "F#m7",
+   "pad": [
+    42,
+    49,
+    54,
+    57,
+    64,
+    73
+   ],
+   "bass": 30,
+   "arp": [
+    73,
+    76,
+    78,
+    81
+   ]
+  }
+ ],
+ "sections": [
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "wind": 1,
+    "hiss": 0.5
+   },
+   "pad_cutoff": 750,
+   "arp_pattern": "A"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 0.8,
+    "arp": 0.8,
+    "wind": 0.7,
+    "hiss": 0.6
+   },
+   "pad_cutoff": 1050,
+   "arp_pattern": "B"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 1,
+    "arp": 0.9,
+    "lead": 0.8,
+    "wind": 0.5,
+    "hiss": 0.7,
+    "crackle": 0.5
+   },
+   "pad_cutoff": 1400,
+   "arp_pattern": "C"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 0.9,
+    "bass": 0.7,
+    "arp": 0.6,
+    "wind": 0.8,
+    "hiss": 0.6
+   },
+   "pad_cutoff": 950,
+   "arp_pattern": "A"
+  },
+  {
+   "bars": 6,
+   "layers": {
+    "pad": 0.75,
+    "wind": 1,
+    "hiss": 0.5
+   },
+   "pad_cutoff": 700,
+   "arp_pattern": "A"
+  }
+ ]
+}

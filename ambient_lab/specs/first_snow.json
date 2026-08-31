@@ -1,0 +1,139 @@
+{
+ "title": "first snow",
+ "seed": 21,
+ "bpm": 84,
+ "beats_per_chord": 8,
+ "chords": [
+  {
+   "name": "Gm7",
+   "pad": [
+    43,
+    50,
+    55,
+    58,
+    65,
+    70
+   ],
+   "bass": 31,
+   "arp": [
+    74,
+    77,
+    79,
+    82
+   ]
+  },
+  {
+   "name": "Dm7",
+   "pad": [
+    50,
+    57,
+    60,
+    65,
+    69,
+    76
+   ],
+   "bass": 38,
+   "arp": [
+    74,
+    77,
+    81,
+    84
+   ]
+  },
+  {
+   "name": "Fmaj7",
+   "pad": [
+    53,
+    60,
+    64,
+    69,
+    72,
+    76
+   ],
+   "bass": 41,
+   "arp": [
+    72,
+    76,
+    77,
+    81
+   ]
+  },
+  {
+   "name": "Bbmaj7",
+   "pad": [
+    46,
+    53,
+    57,
+    62,
+    65,
+    69
+   ],
+   "bass": 34,
+   "arp": [
+    74,
+    77,
+    81,
+    82
+   ]
+  }
+ ],
+ "sections": [
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "hiss": 0.6,
+    "wind": 0.8
+   },
+   "pad_cutoff": 850,
+   "arp_pattern": "A"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 0.9,
+    "arp": 1,
+    "hiss": 0.7
+   },
+   "pad_cutoff": 1250,
+   "arp_pattern": "B"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 1,
+    "arp": 1,
+    "piano": 0.9,
+    "hiss": 0.8,
+    "crackle": 0.6
+   },
+   "pad_cutoff": 1650,
+   "arp_pattern": "C"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 0.9,
+    "arp": 0.9,
+    "lead": 0.6,
+    "piano": 0.6,
+    "hiss": 0.7
+   },
+   "pad_cutoff": 1450,
+   "arp_pattern": "B"
+  },
+  {
+   "bars": 6,
+   "layers": {
+    "pad": 0.8,
+    "hiss": 0.6,
+    "wind": 0.8
+   },
+   "pad_cutoff": 750,
+   "arp_pattern": "A"
+  }
+ ]
+}

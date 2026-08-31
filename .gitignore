@@ -10,3 +10,4 @@
 !ambient_lab/
 !ambient_lab/**
 ambient_lab/out/
+ambient_lab/__pycache__/
