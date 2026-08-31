@@ -7,3 +7,5 @@
 !.github/workflows/desktop-release.yml
 !run_pipeline_cli.py
 !pipeline_core.py
+!ambient_lab/
+!ambient_lab/**
