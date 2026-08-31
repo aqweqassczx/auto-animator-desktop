@@ -1,0 +1,45 @@
+{
+  "title": "aphelion",
+  "seed": 41,
+  "bpm": 67,
+  "beats_per_chord": 8,
+  "chords": [
+    { "name": "G#m9",  "pad": [44, 51, 54, 59, 63, 70], "bass": 32, "arp": [75, 78, 80, 82, 83] },
+    { "name": "Emaj9", "pad": [40, 47, 51, 56, 63, 71], "bass": 28, "arp": [76, 78, 80, 83] },
+    { "name": "Bmaj9", "pad": [47, 54, 58, 63, 73],     "bass": 35, "arp": [75, 78, 82, 83] },
+    { "name": "C#m9",  "pad": [49, 56, 59, 64, 75],     "bass": 37, "arp": [75, 76, 80, 83] }
+  ],
+  "sections": [
+    { "bars": 8,  "layers": { "pad": 1, "hiss": 0.55, "wind": 0.85 }, "pad_cutoff": 820,  "arp_pattern": "A" },
+    { "bars": 8,  "layers": { "pad": 1, "bass": 0.7, "arp": 0.45, "hiss": 0.6, "wind": 0.6 }, "pad_cutoff": 1080, "arp_pattern": "A" },
+    { "bars": 8,  "layers": { "pad": 1, "bass": 0.95, "arp": 0.9, "piano": 0.5, "hiss": 0.65, "wind": 0.4 }, "pad_cutoff": 1460, "arp_pattern": "B" },
+    { "bars": 10, "layers": { "pad": 1, "bass": 1, "arp": 1, "piano": 0.65, "lead": 0.55, "hiss": 0.75, "crackle": 0.45, "wind": 0.3 }, "pad_cutoff": 1860,
+      "arp_pattern": [[0, 0, 0.8], [0.5, 1, 0.68], [1, 2, 0.75], [1.5, -1, 0.85], [3, 0, 0.6], [3.5, 1, 0.58], [4, 2, 0.66], [4.5, -1, 0.78], [6, 1, 0.55], [6.5, 2, 0.62], [7, -1, 0.72]] },
+    { "bars": 8,  "layers": { "pad": 0.95, "bass": 0.7, "arp": 0.65, "piano": 0.4, "hiss": 0.6, "crackle": 0.3, "wind": 0.55 }, "pad_cutoff": 1260,
+      "arp_pattern": [[0, -1, 0.6], [2.5, 2, 0.5], [5, 1, 0.45], [6.75, -1, 0.5]] },
+    { "bars": 6,  "layers": { "pad": 0.85, "hiss": 0.5, "wind": 0.8 }, "pad_cutoff": 780,  "arp_pattern": "A" }
+  ],
+  "piano_pattern": [[0, 2, 0.4], [4.5, 1, 0.32]],
+  "lead_mode": "top",
+  "fx": {
+    "reverb_sec": 11,
+    "predelay": 0.05,
+    "delay_beats": 0.75,
+    "delay_fb": 0.58,
+    "pad_wet": 0.5,
+    "arp_wet": 0.92,
+    "piano_wet": 0.75,
+    "lead_wet": 0.92
+  },
+  "mix": {
+    "pad": 0.41,
+    "bass": 0.27,
+    "arp": 0.18,
+    "piano": 0.3,
+    "lead": 0.14,
+    "hiss": 0.03,
+    "crackle": 0.04,
+    "wind": 0.13
+  },
+  "master": { "target_rms_db": -17, "peak_db": -1.2, "fade_in": 6, "fade_out": 14 }
+}
