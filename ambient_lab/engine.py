@@ -32,7 +32,7 @@ DEFAULT_SPEC = {
     "fx": {"reverb_sec": 9.0, "predelay": 0.04, "delay_beats": 0.75,
            "delay_fb": 0.5, "pad_wet": 0.45, "arp_wet": 0.9,
            "piano_wet": 0.7, "lead_wet": 0.9},
-    "mix": {"pad": 0.34, "bass": 0.36, "arp": 0.17, "piano": 0.40,
+    "mix": {"pad": 0.36, "bass": 0.31, "arp": 0.20, "piano": 0.40,
             "lead": 0.18, "hiss": 0.035, "crackle": 0.05, "wind": 0.10},
     "master": {"target_rms_db": -18.5, "peak_db": -1.2,
                "fade_in": 4.0, "fade_out": 10.0},

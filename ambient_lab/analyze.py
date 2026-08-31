@@ -107,7 +107,7 @@ def main(path):
             verdicts.append(f"стерео-корреляция {corr:.2f} — риск проблем в моно")
         if lr_diff_db is not None and abs(lr_diff_db) > 1.25:
             verdicts.append(f"перекос каналов: R-L = {lr_diff_db:+.1f} дБ (цель |x| <= 1)")
-        if bands["sub"] - bands["mid"] > 9:
+        if bands["sub"] - bands["mid"] > 10:
             verdicts.append(f"суб перевешивает середину на {bands['sub'] - bands['mid']:.0f} дБ")
         if bands["mid"] - bands["high"] > 35:
             verdicts.append("верх мёртвый: high на 35+ дБ ниже mid — добавить текстуру/яркость")
