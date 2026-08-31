@@ -32,7 +32,7 @@ DEFAULT_SPEC = {
     "fx": {"reverb_sec": 9.0, "predelay": 0.04, "delay_beats": 0.75,
            "delay_fb": 0.5, "pad_wet": 0.45, "arp_wet": 0.9,
            "piano_wet": 0.7, "lead_wet": 0.9},
-    "mix": {"pad": 0.34, "bass": 0.40, "arp": 0.17, "piano": 0.40,
+    "mix": {"pad": 0.34, "bass": 0.36, "arp": 0.17, "piano": 0.40,
             "lead": 0.18, "hiss": 0.035, "crackle": 0.05, "wind": 0.10},
     "master": {"target_rms_db": -18.5, "peak_db": -1.2,
                "fade_in": 4.0, "fade_out": 10.0},
@@ -266,7 +266,7 @@ class Renderer:
                     sig += bl_saw(f, n, self.rng.uniform(0, 1))
                 sig /= len(detunes)
                 if idx == 0:
-                    sig += 0.35 * np.sin(2 * np.pi * (f0 / 2) * t + sub_phase)
+                    sig += 0.22 * np.sin(2 * np.pi * (f0 / 2) * t + sub_phase)
                 out[:, ch] += sig
         out /= len(notes)
         out = lowpass(out, cutoff, order=2)
