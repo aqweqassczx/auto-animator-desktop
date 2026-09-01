@@ -81,9 +81,7 @@
   {
    "bars": 8,
    "layers": {
-    "pad": 1,
-    "wind": 1,
-    "hiss": 0.5
+    "pad": 1
    },
    "pad_cutoff": 750,
    "arp_pattern": "A"
@@ -93,9 +91,7 @@
    "layers": {
     "pad": 1,
     "bass": 0.8,
-    "arp": 0.8,
-    "wind": 0.7,
-    "hiss": 0.6
+    "arp": 0.8
    },
    "pad_cutoff": 1050,
    "arp_pattern": "B"
@@ -106,10 +102,7 @@
     "pad": 1,
     "bass": 1,
     "arp": 0.9,
-    "lead": 0.8,
-    "wind": 0.5,
-    "hiss": 0.7,
-    "crackle": 0.5
+    "lead": 0.8
    },
    "pad_cutoff": 1400,
    "arp_pattern": "C"
@@ -119,9 +112,7 @@
    "layers": {
     "pad": 0.9,
     "bass": 0.7,
-    "arp": 0.6,
-    "wind": 0.8,
-    "hiss": 0.6
+    "arp": 0.6
    },
    "pad_cutoff": 950,
    "arp_pattern": "A"
@@ -129,9 +120,7 @@
   {
    "bars": 6,
    "layers": {
-    "pad": 0.75,
-    "wind": 1,
-    "hiss": 0.5
+    "pad": 0.75
    },
    "pad_cutoff": 700,
    "arp_pattern": "A"

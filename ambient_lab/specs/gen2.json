@@ -1,34 +1,261 @@
 {
-  "title": "after hours",
-  "seed": 23,
-  "bpm": 62,
-  "beats_per_chord": 8,
-  "chords": [
-    { "name": "Am9",   "pad": [45, 52, 55, 60, 64, 71], "bass": 33, "arp": [72, 76, 79, 81, 83], "piano": [57, 60, 64, 71] },
-    { "name": "Cmaj9", "pad": [48, 55, 59, 64, 67, 74], "bass": 36, "arp": [72, 74, 76, 79, 83], "piano": [59, 64, 67, 74] },
-    { "name": "Fmaj9", "pad": [41, 55, 60, 64, 67, 76], "bass": 29, "arp": [72, 77, 79, 81, 84], "piano": [57, 60, 64, 72] },
-    { "name": "Em7",   "pad": [40, 59, 62, 67, 71, 79], "bass": 28, "arp": [71, 74, 76, 79, 83], "piano": [59, 62, 67, 71] }
-  ],
-  "sections": [
-    { "bars": 8, "layers": { "pad": 1, "wind": 0.9, "hiss": 0.5 }, "pad_cutoff": 750 },
-    { "bars": 8, "layers": { "pad": 1, "bass": 0.7, "arp": 0.55, "wind": 0.7, "hiss": 0.55 }, "pad_cutoff": 1000, "arp_pattern": "A" },
-    { "bars": 8, "layers": { "pad": 1, "bass": 0.9, "arp": 0.8, "piano": 0.7, "wind": 0.5, "hiss": 0.6, "crackle": 0.4 }, "pad_cutoff": 1300, "arp_pattern": [[0, 0, 0.5], [3.5, 2, 0.45], [6, 1, 0.4]] },
-    { "bars": 8, "layers": { "pad": 1, "bass": 1, "arp": 1, "piano": 0.9, "lead": 0.75, "hiss": 0.7, "crackle": 0.6, "wind": 0.4 }, "pad_cutoff": 1750, "arp_pattern": [[0, 0, 0.55], [1.5, 1, 0.5], [3, 2, 0.5], [4.5, 3, 0.5], [6, -1, 0.6], [7, 2, 0.4]] },
-    { "bars": 8, "layers": { "pad": 0.95, "bass": 0.6, "arp": 0.4, "piano": 0.55, "lead": 0.3, "wind": 0.7, "hiss": 0.6, "crackle": 0.3 }, "pad_cutoff": 1050, "arp_pattern": "A" },
-    { "bars": 6, "layers": { "pad": 0.85, "wind": 0.9, "hiss": 0.5 }, "pad_cutoff": 700 }
-  ],
-  "piano_pattern": [[0.5, 2, 0.45], [3, 1, 0.4], [5.5, 3, 0.35], [7, 0, 0.3]],
-  "lead_mode": "top",
-  "fx": {
-    "reverb_sec": 11.5,
-    "predelay": 0.05,
-    "delay_beats": 0.75,
-    "delay_fb": 0.55,
-    "pad_wet": 0.5,
-    "arp_wet": 0.9,
-    "piano_wet": 0.75,
-    "lead_wet": 0.92
+ "title": "after hours",
+ "seed": 23,
+ "bpm": 62,
+ "beats_per_chord": 8,
+ "chords": [
+  {
+   "name": "Am9",
+   "pad": [
+    45,
+    52,
+    55,
+    60,
+    64,
+    71
+   ],
+   "bass": 33,
+   "arp": [
+    72,
+    76,
+    79,
+    81,
+    83
+   ],
+   "piano": [
+    57,
+    60,
+    64,
+    71
+   ]
   },
-  "mix": { "wind": 0.14, "lead": 0.16, "bass": 0.25, "piano": 0.44 },
-  "master": { "target_rms_db": -17, "peak_db": -1.2, "fade_in": 6, "fade_out": 12 }
+  {
+   "name": "Cmaj9",
+   "pad": [
+    48,
+    55,
+    59,
+    64,
+    67,
+    74
+   ],
+   "bass": 36,
+   "arp": [
+    72,
+    74,
+    76,
+    79,
+    83
+   ],
+   "piano": [
+    59,
+    64,
+    67,
+    74
+   ]
+  },
+  {
+   "name": "Fmaj9",
+   "pad": [
+    41,
+    55,
+    60,
+    64,
+    67,
+    76
+   ],
+   "bass": 29,
+   "arp": [
+    72,
+    77,
+    79,
+    81,
+    84
+   ],
+   "piano": [
+    57,
+    60,
+    64,
+    72
+   ]
+  },
+  {
+   "name": "Em7",
+   "pad": [
+    40,
+    59,
+    62,
+    67,
+    71,
+    79
+   ],
+   "bass": 28,
+   "arp": [
+    71,
+    74,
+    76,
+    79,
+    83
+   ],
+   "piano": [
+    59,
+    62,
+    67,
+    71
+   ]
+  }
+ ],
+ "sections": [
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1
+   },
+   "pad_cutoff": 750
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 0.7,
+    "arp": 0.55
+   },
+   "pad_cutoff": 1000,
+   "arp_pattern": "A"
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 0.9,
+    "arp": 0.8,
+    "piano": 0.7
+   },
+   "pad_cutoff": 1300,
+   "arp_pattern": [
+    [
+     0,
+     0,
+     0.5
+    ],
+    [
+     3.5,
+     2,
+     0.45
+    ],
+    [
+     6,
+     1,
+     0.4
+    ]
+   ]
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 1,
+    "bass": 1,
+    "arp": 1,
+    "piano": 0.9,
+    "lead": 0.75
+   },
+   "pad_cutoff": 1750,
+   "arp_pattern": [
+    [
+     0,
+     0,
+     0.55
+    ],
+    [
+     1.5,
+     1,
+     0.5
+    ],
+    [
+     3,
+     2,
+     0.5
+    ],
+    [
+     4.5,
+     3,
+     0.5
+    ],
+    [
+     6,
+     -1,
+     0.6
+    ],
+    [
+     7,
+     2,
+     0.4
+    ]
+   ]
+  },
+  {
+   "bars": 8,
+   "layers": {
+    "pad": 0.95,
+    "bass": 0.6,
+    "arp": 0.4,
+    "piano": 0.55,
+    "lead": 0.3
+   },
+   "pad_cutoff": 1050,
+   "arp_pattern": "A"
+  },
+  {
+   "bars": 6,
+   "layers": {
+    "pad": 0.85
+   },
+   "pad_cutoff": 700
+  }
+ ],
+ "piano_pattern": [
+  [
+   0.5,
+   2,
+   0.45
+  ],
+  [
+   3,
+   1,
+   0.4
+  ],
+  [
+   5.5,
+   3,
+   0.35
+  ],
+  [
+   7,
+   0,
+   0.3
+  ]
+ ],
+ "lead_mode": "top",
+ "fx": {
+  "reverb_sec": 11.5,
+  "predelay": 0.05,
+  "delay_beats": 0.75,
+  "delay_fb": 0.55,
+  "pad_wet": 0.5,
+  "arp_wet": 0.9,
+  "piano_wet": 0.75,
+  "lead_wet": 0.92
+ },
+ "mix": {
+  "wind": 0.14,
+  "lead": 0.16,
+  "bass": 0.25,
+  "piano": 0.44
+ },
+ "master": {
+  "target_rms_db": -17,
+  "peak_db": -1.2,
+  "fade_in": 6,
+  "fade_out": 12
+ }
 }
