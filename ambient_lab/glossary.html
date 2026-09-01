@@ -1,0 +1,110 @@
+<title>словарь coldroom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ground: #0A0D13; --panel: #10141D; --line: #1C2230;
+    --ink: #E6EBF2; --muted: #97A1B3; --faint: #4A5468;
+    --accent: #8FC1E3;
+    --serif: "Cormorant Garamond", Georgia, serif;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-family: var(--serif); font-style: italic; font-weight: 500;
+       font-size: 40px; margin: 0 0 4px; }
+  h1 .dot { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 36px; max-width: 60ch; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+       color: var(--faint); margin: 40px 0 14px; border-bottom: 1px solid var(--line);
+       padding-bottom: 8px; }
+  dl { margin: 0; }
+  .term { padding: 10px 0; }
+  dt { color: var(--accent); font-weight: 600; display: inline; }
+  dt code { font-family: var(--mono); font-size: 13px; color: var(--muted);
+            background: var(--panel); border: 1px solid var(--line);
+            border-radius: 4px; padding: 1px 6px; margin-left: 6px; font-weight: 400; }
+  dd { display: inline; margin: 0; color: var(--muted); }
+  dd b { color: var(--ink); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+          background: var(--panel); border: 1px solid var(--line);
+          border-radius: 999px; padding: 6px 12px; }
+  .note { color: var(--faint); font-size: 13px; margin-top: 28px; max-width: 60ch; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap">
+
+<div class="wrap">
+  <h1>словарь coldroom<span class="dot">.</span></h1>
+  <p class="sub">Термины нашей музыки простым языком — чтобы давать точный фидбэк,
+    не зная теории. Каждый термин привязан к полю спеки инструмента.</p>
+
+  <h2>Ритм и время</h2>
+  <dl>
+    <div class="term"><dt>BPM<code>bpm</code></dt> — <dd>скорость трека, ударов в минуту. Наш жанр: 60–90.</dd></div>
+    <div class="term"><dt>Доля и такт</dt> — <dd>доля — один «удар» темпа; четыре доли = такт (bar).</dd></div>
+    <div class="term"><dt>Секция<code>sections</code></dt> — <dd>кусок трека из нескольких тактов со своим набором слоёв. Трек — цепочка секций.</dd></div>
+    <div class="term"><dt>Арка</dt> — <dd>как плотность растёт и спадает: тихое вступление → слои входят по одному → <b>пик на ~2/3</b> → распад. Главный источник «движения» в жанре.</dd></div>
+    <div class="term"><dt>Паттерн<code>arp_pattern</code></dt> — <dd>ритмический рисунок: на каких долях какие ноты. A — редкий, B — основной, C — вариация.</dd></div>
+  </dl>
+
+  <h2>Ноты и аккорды</h2>
+  <dl>
+    <div class="term"><dt>Нота / MIDI-номер</dt> — <dd>высота звука числом: 60 = «до» (C4). +12 = октава вверх.</dd></div>
+    <div class="term"><dt>Октава</dt> — <dd>та же нота вдвое выше или ниже: C3 → C4 → C5.</dd></div>
+    <div class="term"><dt>Тональность</dt> — <dd>«семья» нот трека, например C minor. <b>Минор звучит грустно</b> — наш жанр почти всегда минорный.</dd></div>
+    <div class="term"><dt>Аккорд<code>chords</code></dt> — <dd>три и больше нот разом. <b>Корень</b> — главная нота, её играет бас.</dd></div>
+    <div class="term"><dt>Септима и нона (7-я, 9-я)</dt> — <dd>добавочные ноты, делающие аккорд «задумчивым»: Cm9 — до-минор с ноной. Жанр без них не живёт.</dd></div>
+    <div class="term"><dt>Войсинг</dt> — <dd>как раскидать ноты аккорда по октавам. Наш приём: низ не трогаем, средние ноты кидаем на октаву вверх — аккорд становится «пышным».</dd></div>
+    <div class="term"><dt>Прогрессия</dt> — <dd>последовательность аккордов по кругу, у нас обычно четыре.</dd></div>
+    <div class="term"><dt>Арпеджио</dt> — <dd>ноты аккорда по одной, а не разом.</dd></div>
+  </dl>
+
+  <h2>Слои трека</h2>
+  <dl>
+    <div class="term"><dt>Пэд<code>pad</code></dt> — <dd>фоновая «подушка»: длинные размытые аккорды. Основа жанра.</dd></div>
+    <div class="term"><dt>Саб-бас<code>bass</code></dt> — <dd>очень низкая одиночная нота (корень), скорее ощущается телом. <b>Глайд</b> — плавное переползание между нотами.</dd></div>
+    <div class="term"><dt>Арп<code>arp</code></dt> — <dd>звенящая синусовая мелодия по нотам аккорда, уходящая в эхо.</dd></div>
+    <div class="term"><dt>Клавиши<code>piano</code></dt> — <dd>мягкие редкие «капли» пианино.</dd></div>
+    <div class="term"><dt>Лид<code>lead</code></dt> — <dd>«поющий» верхний голос с лёгким расстроем и вибрато — та самая «боль».</dd></div>
+    <div class="term"><dt>Текстуры<code>hiss · crackle · wind</code></dt> — <dd>немузыкальные звуки для фона и верха спектра: плёночный шум (тот самый «шелест»), винильные щелчки, гул ветра. Планово заменяются живыми записями природы — дождь, птицы.</dd></div>
+  </dl>
+
+  <h2>Обработка</h2>
+  <dl>
+    <div class="term"><dt>Фильтр / cutoff<code>pad_cutoff</code></dt> — <dd>«яркость»: срезает верх звука. Меньше — темнее и глуше. У пэда растёт к пику трека.</dd></div>
+    <div class="term"><dt>Реверб<code>reverb_sec</code></dt> — <dd>эхо огромного «зала». <b>Хвост</b> — сколько секунд звук дозвучивает (у нас 8–12).</dd></div>
+    <div class="term"><dt>Дилей<code>delay_fb</code></dt> — <dd>повторы звука. <b>Feedback</b> — сколько повторов; <b>пинг-понг</b> — повторы прыгают лево-право. Фирменный приём на арпе.</dd></div>
+    <div class="term"><dt>Автоматизация</dt> — <dd>плавное изменение параметра во времени: громкость, cutoff.</dd></div>
+  </dl>
+
+  <h2>Громкость и микс</h2>
+  <dl>
+    <div class="term"><dt>Микс<code>mix</code></dt> — <dd>баланс громкостей слоёв. «Арп слишком громкий» — это сюда.</dd></div>
+    <div class="term"><dt>LUFS / RMS</dt> — <dd>воспринимаемая/средняя громкость трека. Жанр тихий: −14…−20 LUFS.</dd></div>
+    <div class="term"><dt>Пик и клиппинг</dt> — <dd>самый громкий момент и перегруз (хрип). Клиппинга быть не должно.</dd></div>
+    <div class="term"><dt>Спектр</dt> — <dd>раскладка по частотам: саб → низ → середина → верх → air. «Верх пустой» — нет высоких; в жанре их дают текстуры.</dd></div>
+    <div class="term"><dt>Стерео и моно</dt> — <dd>ширина картинки; телефонный динамик играет в моно, поэтому совместимость важна.</dd></div>
+  </dl>
+
+  <h2>Наши слова</h2>
+  <dl>
+    <div class="term"><dt>Спека</dt> — <dd>JSON-описание трека целиком. Человек правит спеку — движок исполняет, всегда одинаково.</dd></div>
+    <div class="term"><dt>Seed<code>seed</code></dt> — <dd>число-зерно случайности: тот же seed = тот же трек бит в бит.</dd></div>
+    <div class="term"><dt>Реролл</dt> — <dd>пересобрать паттерны с новым seed.</dd></div>
+    <div class="term"><dt>Движок и анализатор</dt> — <dd>engine.py рендерит спеку в звук + MIDI; analyze.py проверяет громкость, спектр и стерео числами вместо ушей.</dd></div>
+  </dl>
+
+  <h2>Как давать фидбэк</h2>
+  <div class="chips">
+    <span class="chip">пэд темнее</span><span class="chip">арп тише и реже</span>
+    <span class="chip">хвост реверба длиннее</span><span class="chip">бас жирнее</span>
+    <span class="chip">клавиши раньше</span><span class="chip">пик арки позже</span>
+    <span class="chip">секции длиннее</span><span class="chip">лид убрать</span>
+    <span class="chip">текстуры заменить дождём</span>
+  </div>
+  <p class="note">Этого достаточно — любые такие фразы переводятся в точные правки
+    спеки или движка.</p>
+</div>
