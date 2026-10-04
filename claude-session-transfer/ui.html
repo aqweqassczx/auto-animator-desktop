@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Перенос сессий Claude</title>
+<style>
+  :root {
+    --bg: #1a1918; --panel: #232220; --panel2: #2b2a27; --line: #3a3936; --text: #ecebe8;
+    --muted: #9b9890; --accent: #d97757; --ok: #6fbf73; --warn: #e0b04f; --bad: #e06c5f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; flex: 1; }
+  .pill { padding: 3px 10px; border-radius: 99px; font-size: 12px; background: var(--panel2); border: 1px solid var(--line); }
+  .pill.on { color: var(--warn); border-color: var(--warn); }
+  .pill.off { color: var(--ok); border-color: var(--ok); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 80px; display: grid; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  select, input[type=text] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font: inherit; }
+  select { min-width: 0; flex: 1; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; user-select: none; }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); }
+  .steps b { color: var(--text); }
+  .group { border-top: 1px solid var(--line); }
+  .group:first-child { border-top: 0; }
+  .ghead { display: flex; gap: 8px; align-items: center; padding: 8px 4px; cursor: pointer; font-weight: 600; }
+  .ghead .cnt { color: var(--muted); font-weight: 400; }
+  .ghead .arrow { width: 14px; color: var(--muted); }
+  .sess { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 10px; align-items: center; padding: 5px 4px 5px 26px; border-radius: 6px; }
+  .sess:hover { background: var(--panel2); }
+  .sess .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess .d { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .tags { display: flex; gap: 4px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
+  .tag.ok { color: var(--ok); } .tag.bad { color: var(--bad); } .tag.warn { color: var(--warn); }
+  .list { max-height: 55vh; overflow: auto; }
+  .empty { color: var(--muted); padding: 20px; text-align: center; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  #log { white-space: pre-wrap; font: 12px/1.5 Consolas, monospace; color: var(--muted); max-height: 260px; overflow: auto; margin: 0; }
+  #log .e { color: var(--bad); } #log .s { color: var(--ok); }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; width: min(900px, 92vw); }
+  dialog pre { white-space: pre-wrap; font: 12px Consolas, monospace; max-height: 60vh; overflow: auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } .sess { grid-template-columns: 22px 1fr; } .sess .d, .sess .tags { grid-column: 2; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Перенос сессий Claude Desktop</h1>
+  <span id="dstatus" class="pill">…</span>
+  <button id="bClose">Закрыть Claude</button>
+  <button id="bStart">Запустить Claude</button>
+  <button id="bDiag">Диагностика</button>
+</header>
+<main>
+  <details class="card">
+    <summary class="muted">Как пользоваться</summary>
+    <ol class="steps">
+      <li><b>Перед сменой аккаунта:</b> выбери папку текущего аккаунта (обычно верхняя, свежая) → отметь нужные сессии → «Сделать снимок». Это резервная копия.</li>
+      <li><b>Переключи аккаунт</b> в Claude Desktop. Если папки нового аккаунта нет в списке «Куда», открой вкладку Code и создай одну любую сессию, потом нажми ⟳.</li>
+      <li><b>Закрой Claude</b> кнопкой сверху. В «Откуда» выбери старую папку или снимок, в «Куда» — папку нового аккаунта, нажми «Перенести».</li>
+      <li><b>Запусти Claude.</b> Сессии появятся в сайдбаре, история подтянется из ~/.claude/projects.</li>
+    </ol>
+    <p class="small muted">Перед каждой записью папка назначения автоматически архивируется в <code>backups/</code>.</p>
+  </details>
+
+  <section class="card">
+    <h2>Откуда</h2>
+    <div class="row">
+      <select id="src"></select>
+      <button id="bAlias" title="Подписать папку (например «Max аккаунт»)">Подписать</button>
+      <button id="bRefresh" title="Обновить">⟳</button>
+    </div>
+    <div id="srcInfo" class="small muted" style="margin-top:6px"></div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin:0;flex:1">Сессии <span id="selCount" class="muted"></span></h2>
+      <input id="q" type="text" placeholder="Поиск по названию или папке">
+      <label class="chk"><input type="checkbox" id="hideArch" checked> скрыть архивные</label>
+      <label class="chk"><input type="checkbox" id="hideNoTr"> скрыть без истории</label>
+    </div>
+    <div class="row small" style="margin-bottom:6px">
+      <button id="bAll">Выбрать видимые</button>
+      <button id="bNone">Снять всё</button>
+      <button id="bNew" title="Выбрать то, чего ещё нет в «Куда»">Выбрать недостающие в цели</button>
+      <button id="bExpand">Развернуть/свернуть</button>
+    </div>
+    <div id="list" class="list"><div class="empty">Загрузка…</div></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Снимок</h2>
+      <p class="small muted" style="margin-top:0">Сохраняет выбранные сессии в zip в папке <code>snapshots/</code>.</p>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="incTr" checked> включить историю (.jsonl)</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input id="note" type="text" placeholder="Заметка (необязательно)" style="flex:1">
+        <button id="bSnap" class="primary">Сделать снимок</button>
+        <button id="bSnapDir">Папка</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Куда</h2>
+      <div class="row"><select id="dst"></select></div>
+      <div id="dstInfo" class="small muted" style="margin:6px 0"></div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="ovr"> перезаписывать существующие</label>
+        <label class="chk"><input type="checkbox" id="rw" checked> заменить ID аккаунта внутри файлов</label>
+        <label class="chk"><input type="checkbox" id="rtr" checked> вернуть недостающую историю из снимка</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="bRestore" class="primary" style="flex:1">Перенести выбранные →</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Журнал</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="row"><b style="flex:1">Диагностика</b><button id="bCopyDiag">Копировать</button><button onclick="dlg.close()">Закрыть</button></div>
+  <pre id="diagText"></pre>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, sessions = [], targetSessions = [], selected = new Set(), collapsed = new Set(), allCollapsed = false;
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function log(msg, cls) {
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").prepend(line);
+}
+const short = id => id ? id.slice(0, 8) : "—";
+const fmtDate = t => t ? new Date(t * 1000).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + " МБ" : Math.max(1, Math.round(b / 1024)) + " КБ";
+const storeLabel = s => `${s.alias ? s.alias + " · " : ""}аккаунт ${short(s.account)} / орг ${short(s.org)} — ${s.count} сесс.${s.mtime ? " · изм. " + fmtDate(s.mtime) : ""}`;
+
+async function loadState(keep = true) {
+  const prevSrc = $("src").value, prevDst = $("dst").value;
+  S = await api("/api/state");
+  renderDesktop(S.desktop);
+  const src = $("src"), dst = $("dst");
+  src.innerHTML = ""; dst.innerHTML = "";
+  const g1 = document.createElement("optgroup"); g1.label = "Папки аккаунтов";
+  S.stores.forEach((s, i) => g1.append(new Option((i === 0 ? "● " : "") + storeLabel(s), "store:" + s.id)));
+  const g2 = document.createElement("optgroup"); g2.label = "Снимки";
+  S.snapshots.forEach(sn => g2.append(new Option(`${sn.name.replace(/^snapshot_|\.zip$/g, "")} — ${sn.count} сесс. · ${sn.source.alias || "аккаунт " + short(sn.source.account)}${sn.note ? " · " + sn.note : ""}`, "snap:" + sn.name)));
+  if (g1.children.length) src.append(g1);
+  if (g2.children.length) src.append(g2);
+  if (!src.options.length) src.append(new Option("Ничего не найдено — открой «Диагностика»", ""));
+  dst.append(new Option("— выбери папку нового аккаунта —", ""));
+  [...S.stores, ...S.extra_targets].forEach(s => dst.append(new Option(storeLabel(s), s.id)));
+  if (keep && [...src.options].some(o => o.value === prevSrc)) src.value = prevSrc;
+  if (keep && [...dst.options].some(o => o.value === prevDst)) dst.value = prevDst;
+  await loadSessions();
+  await loadTarget();
+}
+
+function renderDesktop(d) {
+  const el = $("dstatus");
+  if (!d.supported) { el.textContent = "статус Claude: только Windows"; el.className = "pill"; return; }
+  el.textContent = d.running ? "Claude запущен" : "Claude закрыт";
+  el.className = "pill " + (d.running ? "on" : "off");
+  $("bClose").disabled = !d.running; $("bStart").disabled = d.running;
+}
+
+function currentSource() {
+  const v = $("src").value;
+  if (!v) return null;
+  return v.startsWith("store:") ? { type: "store", id: v.slice(6) } : { type: "snapshot", id: v.slice(5) };
+}
+
+async function loadSessions() {
+  const src = currentSource();
+  selected.clear();
+  if (!src) { sessions = []; render(); return; }
+  sessions = src.type === "store" ? await api("/api/sessions?store=" + encodeURIComponent(src.id))
+                                  : await api("/api/snapshot?name=" + encodeURIComponent(src.id));
+  if (src.type === "store") {
+    const s = S.stores.find(x => x.id === src.id);
+    $("srcInfo").textContent = s ? s.path : "";
+  } else {
+    const sn = S.snapshots.find(x => x.name === src.id);
+    $("srcInfo").textContent = sn ? `${S.snap_dir}\\${sn.name} · ${fmtSize(sn.size)} · история ${sn.include_transcripts ? "внутри" : "не включена"} · источник ${sn.source.path || ""}` : "";
+  }
+  sessions.forEach(s => { if (!s.archived && (s.transcript || s.in_snapshot)) selected.add(s.file); });
+  render();
+}
+
+async function loadTarget() {
+  const id = $("dst").value;
+  targetSessions = [];
+  $("dstInfo").textContent = id || "";
+  if (id) {
+    try { targetSessions = await api("/api/sessions?store=" + encodeURIComponent(id)); } catch (e) {}
+    $("dstInfo").textContent = `${id} · сейчас там ${targetSessions.length} сесс.`;
+  }
+  render();
+}
+
+function inTarget(s) {
+  return targetSessions.some(t => t.file === s.file || (s.transcript_id && t.transcript_id === s.transcript_id));
+}
+
+function visible() {
+  const q = $("q").value.trim().toLowerCase();
+  return sessions.filter(s =>
+    (!$("hideArch").checked || !s.archived) &&
+    (!$("hideNoTr").checked || s.transcript || s.in_snapshot) &&
+    (!q || (s.title + " " + s.cwd).toLowerCase().includes(q)));
+}
+
+function render() {
+  const list = $("list");
+  const vis = visible();
+  $("selCount").textContent = `· выбрано ${selected.size} из ${sessions.length}`;
+  if (!vis.length) { list.innerHTML = `<div class="empty">${sessions.length ? "Всё скрыто фильтрами" : "Сессий нет"}</div>`; return; }
+  const groups = new Map();
+  vis.forEach(s => { const k = s.cwd || s.project; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); });
+  const frag = document.createDocumentFragment();
+  [...groups.entries()].sort((a, b) => (b[1][0].time || 0) - (a[1][0].time || 0)).forEach(([key, items]) => {
+    const g = document.createElement("div"); g.className = "group";
+    const nSel = items.filter(s => selected.has(s.file)).length;
+    const head = document.createElement("div"); head.className = "ghead";
+    const isCol = collapsed.has(key);
+    head.innerHTML = `<span class="arrow">${isCol ? "▸" : "▾"}</span><input type="checkbox"><span>${esc(items[0].project)}</span><span class="cnt">${nSel}/${items.length}</span><span class="cnt small" style="margin-left:auto">${esc(key)}</span>`;
+    const cb = head.querySelector("input");
+    cb.checked = nSel === items.length; cb.indeterminate = nSel > 0 && nSel < items.length;
+    cb.onclick = e => { e.stopPropagation(); items.forEach(s => cb.checked ? selected.add(s.file) : selected.delete(s.file)); render(); };
+    head.onclick = () => { isCol ? collapsed.delete(key) : collapsed.add(key); render(); };
+    g.append(head);
+    if (!isCol) items.forEach(s => {
+      const row = document.createElement("label"); row.className = "sess";
+      const tags = [];
+      if (s.transcript) tags.push(`<span class="tag ok" title="${esc(s.transcript.path)}">история ${fmtSize(s.transcript.size)}</span>`);
+      else if (s.in_snapshot) tags.push(`<span class="tag warn">история в снимке</span>`);
+      else tags.push(`<span class="tag bad" title="Файл .jsonl не найден — сессия откроется пустой">нет истории</span>`);
+      if (s.archived) tags.push(`<span class="tag">архив</span>`);
+      if (s.bad_json) tags.push(`<span class="tag bad">битый json</span>`);
+      if ($("dst").value && inTarget(s)) tags.push(`<span class="tag warn">уже в цели</span>`);
+      row.innerHTML = `<input type="checkbox" ${selected.has(s.file) ? "checked" : ""}><span class="t" title="${esc(s.file)}">${esc(s.title)}</span><span class="tags">${tags.join("")}</span><span class="d">${fmtDate(s.time)}</span>`;
+      row.querySelector("input").onchange = e => { e.target.checked ? selected.add(s.file) : selected.delete(s.file); render(); };
+      g.append(row);
+    });
+    frag.append(g);
+  });
+  list.innerHTML = ""; list.append(frag);
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function run(btn, fn) {
+  btn.disabled = true;
+  try { await fn(); } catch (e) { log(e.message, "e"); } finally { btn.disabled = false; }
+}
+
+$("src").onchange = () => run($("src"), loadSessions);
+$("dst").onchange = () => run($("dst"), loadTarget);
+$("q").oninput = render; $("hideArch").onchange = render; $("hideNoTr").onchange = render;
+$("bRefresh").onclick = () => run($("bRefresh"), loadState);
+$("bAll").onclick = () => { visible().forEach(s => selected.add(s.file)); render(); };
+$("bNone").onclick = () => { selected.clear(); render(); };
+$("bNew").onclick = () => { selected.clear(); visible().forEach(s => { if (!inTarget(s)) selected.add(s.file); }); render(); };
+$("bExpand").onclick = () => {
+  allCollapsed = !allCollapsed; collapsed.clear();
+  if (allCollapsed) sessions.forEach(s => collapsed.add(s.cwd || s.project));
+  render();
+};
+$("bAlias").onclick = () => run($("bAlias"), async () => {
+  const src = currentSource();
+  if (!src || src.type !== "store") return log("Подписать можно только папку аккаунта", "e");
+  const s = S.stores.find(x => x.id === src.id);
+  const name = prompt("Подпись для этой папки (пусто — убрать):", s.alias || "");
+  if (name === null) return;
+  await api("/api/alias", { id: src.id, name });
+  await loadState();
+});
+$("bSnap").onclick = () => run($("bSnap"), async () => {
+  const src = currentSource();
+  if (!src || src.type !== "store") return log("Снимок делается из папки аккаунта", "e");
+  if (!selected.size) return log("Ничего не выбрано", "e");
+  const r = await api("/api/snapshot", { store: src.id, files: [...selected], include_transcripts: $("incTr").checked, note: $("note").value });
+  log(`Снимок готов: ${r.name} (${r.count} сесс.)`, "s");
+  $("note").value = "";
+  await loadState();
+});
+$("bSnapDir").onclick = () => run($("bSnapDir"), () => api("/api/open", { path: S.snap_dir }));
+$("bRestore").onclick = () => run($("bRestore"), async () => {
+  const src = currentSource(), target = $("dst").value;
+  if (!src) return log("Не выбран источник", "e");
+  if (!target) return log("Не выбрана папка «Куда»", "e");
+  if (!selected.size) return log("Ничего не выбрано", "e");
+  const st = { desktop: await api("/api/desktop") }; renderDesktop(st.desktop);
+  let force = false;
+  if (st.desktop.running) {
+    if (!confirm("Claude Desktop запущен — он может перезаписать файлы. Закрыть его сейчас?")) return;
+    const c = await api("/api/desktop/close", {});
+    log(`Закрыто процессов Claude: ${c.closed}`);
+    if (c.running) { force = confirm("Claude всё ещё виден в процессах. Всё равно записать?"); if (!force) return; }
+  }
+  const r = await api("/api/restore", { source: src, files: [...selected], target, overwrite: $("ovr").checked,
+    rewrite_ids: $("rw").checked, restore_transcripts: $("rtr").checked, force });
+  log(`Перенесено: ${r.copied.length}, пропущено (уже были): ${r.skipped.length}, восстановлено историй: ${r.transcripts.length}${r.backup ? ", бэкап цели: " + r.backup : ""}`, "s");
+  r.errors.forEach(e => log(e, "e"));
+  await loadState();
+  if (r.copied.length && confirm("Готово. Запустить Claude?")) { await api("/api/desktop/start", {}); setTimeout(() => loadState(), 3000); }
+});
+$("bClose").onclick = () => run($("bClose"), async () => { const r = await api("/api/desktop/close", {}); log(`Закрыто процессов Claude: ${r.closed}`); await loadState(); });
+$("bStart").onclick = () => run($("bStart"), async () => { const r = await api("/api/desktop/start", {}); log("Запускаю: " + r.started); setTimeout(() => loadState(), 3000); });
+$("bDiag").onclick = () => run($("bDiag"), async () => { const r = await api("/api/diagnostics"); $("diagText").textContent = r.text; $("dlg").showModal(); });
+$("bCopyDiag").onclick = () => navigator.clipboard.writeText($("diagText").textContent).then(() => log("Диагностика скопирована"));
+setInterval(() => api("/api/desktop").then(renderDesktop).catch(() => {}), 8000);
+
+loadState(false).catch(e => log(e.message, "e"));
+</script>
+</body>
+</html>
